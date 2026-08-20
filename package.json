@@ -1,0 +1,56 @@
+{
+  "name": "mat-ai-os-ui-v2",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MAT-AI-OS desktop UI (V2 foundation) — Electron shell over the VISION API",
+  "author": "Farez",
+  "type": "module",
+  "main": "dist-electron/main/index.js",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.app.json --pretty false && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --pretty false && tsc -p tsconfig.electron.json --pretty false",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist:electron": "electron-builder"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.22",
+    "globals": "^16.4.0",
+    "jsdom": "^27.0.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.44.1",
+    "vite": "^8.2.0",
+    "vite-plugin-electron": "^1.1.1",
+    "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.matai.os.ui.v2",
+    "productName": "MAT-AI-OS UI V2",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    }
+  }
+}

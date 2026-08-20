@@ -1,0 +1,32 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--hud-font);
+  color: var(--hud-text);
+  background:
+    radial-gradient(ellipse 900px 500px at 50% -12%, var(--hud-accent-glow), transparent 60%),
+    var(--hud-void);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

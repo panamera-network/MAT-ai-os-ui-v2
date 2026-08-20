@@ -1,0 +1,122 @@
+.presence-hero {
+  flex: 3 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  position: relative;
+}
+
+.presence-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 520px 420px at 50% 50%, var(--hud-accent-glow), transparent 70%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.presence-hero__core {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.presence-hero__identity {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  text-align: center;
+  bottom: -56px;
+}
+
+.presence-hero__name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--hud-text);
+}
+
+.presence-hero__caption {
+  font-family: var(--hud-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--hud-text-muted);
+}
+
+.presence-hero__caption--online {
+  color: var(--hud-green);
+}
+
+.presence-hero__caption--checking {
+  color: var(--hud-amber);
+}
+
+.presence-hero__caption--offline {
+  color: var(--hud-red);
+}
+
+.presence-hero__note {
+  margin-top: var(--space-1);
+  font-size: 12px;
+  color: var(--hud-text-faint);
+}
+
+.presence-hero__note--warn {
+  color: var(--hud-amber);
+}
+
+.presence-hero__readout {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-family: var(--hud-font-mono);
+}
+
+.presence-hero__readout--left {
+  align-items: flex-end;
+  text-align: right;
+  padding-right: var(--space-5);
+}
+
+.presence-hero__readout--right {
+  align-items: flex-start;
+  text-align: left;
+  padding-left: var(--space-5);
+}
+
+.presence-hero__readout::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: var(--space-5);
+  height: 1px;
+  background: var(--hud-border-strong);
+}
+
+.presence-hero__readout--left::after {
+  right: 0;
+}
+
+.presence-hero__readout--right::after {
+  left: 0;
+}
+
+.presence-hero__readout-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--hud-text-faint);
+  text-transform: uppercase;
+}
+
+.presence-hero__readout-value {
+  font-size: 13px;
+  color: var(--hud-text-muted);
+}
