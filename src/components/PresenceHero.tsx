@@ -1,11 +1,15 @@
+import type { ReactNode } from 'react'
 import type { ConnectionState } from '../hooks/useHealth'
 import type { Health } from '../domain/vision'
-import { PresenceOrb } from './PresenceOrb'
 import './PresenceHero.css'
 
 interface PresenceHeroProps {
   connection: ConnectionState
   health: Health | null
+  /** The orb visual itself — this component owns the surrounding chrome
+   * (readouts, caption, layout) only, never which concrete orb renders
+   * inside it. See `canvas-views/MatPresenceView.tsx`, the one caller. */
+  orb: ReactNode
 }
 
 const CAPTION: Record<ConnectionState, string> = {
@@ -34,12 +38,13 @@ function configNotes(health: Health): string[] {
 }
 
 /**
- * MAT presence — the hero of this screen. The orb is the visual centerpiece;
- * the two flanking readouts and the caption are the entire "core
- * health/status" surface, all real fields from `GET /health`, never
- * fabricated metrics. Every field is `'—'` until `connection === 'online'`.
+ * MAT presence — the hero of this screen. The orb (`orb`, supplied by the
+ * caller) is the visual centerpiece; the two flanking readouts and the
+ * caption are the entire "core health/status" surface, all real fields from
+ * `GET /health`, never fabricated metrics. Every field is `'—'` until
+ * `connection === 'online'`.
  */
-export function PresenceHero({ connection, health }: PresenceHeroProps) {
+export function PresenceHero({ connection, health, orb }: PresenceHeroProps) {
   // Narrowed once here so every usage below gets a real `Health`, not a
   // `Health | null` a reader has to re-check — `null` whenever we're not
   // actually online, regardless of whether a stale `health` value lingers.
@@ -54,7 +59,7 @@ export function PresenceHero({ connection, health }: PresenceHeroProps) {
       </div>
 
       <div className="presence-hero__core">
-        <PresenceOrb connection={connection} />
+        {orb}
         <div className="presence-hero__identity">
           <span className="presence-hero__name">MAT</span>
           <span className={`presence-hero__caption presence-hero__caption--${connection}`}>{CAPTION[connection]}</span>

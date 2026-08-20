@@ -1,6 +1,7 @@
 .presence-hero {
-  flex: 3 1 0;
-  min-height: 0;
+  /* Fills whatever host mounts it (ActiveCanvas today) — sizing/flex-grow
+     is the host's concern, not this component's. */
+  height: 100%;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;

@@ -1,0 +1,33 @@
+.canvas-switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.canvas-switcher__button {
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--hud-text-faint);
+  font-family: var(--hud-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.canvas-switcher__button:hover {
+  color: var(--hud-text-muted);
+}
+
+.canvas-switcher__button.is-active {
+  color: var(--hud-accent);
+  background: var(--hud-accent-glow);
+}
+
+.canvas-switcher__button:focus-visible {
+  outline: 1px solid var(--hud-accent-dim);
+  outline-offset: 1px;
+}

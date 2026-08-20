@@ -21,6 +21,16 @@ export default defineConfig({
       },
     }),
   ],
+  // The presence-orb package is consumed via a `link:` (symlink) dependency
+  // and carries react/react-dom/three/@react-three/fiber as its own
+  // devDependencies for its standalone demo — without this, Vite can
+  // resolve those from the linked package's own node_modules instead of
+  // ours, giving two separate React instances and breaking hooks with
+  // "Cannot read properties of null (reading 'useMemo')". Dedupe forces
+  // every import of these to resolve to this project's own copy.
+  resolve: {
+    dedupe: ['react', 'react-dom', 'three', '@react-three/fiber'],
+  },
   server: { host: '127.0.0.1', port: 4174 },
   test: {
     environment: 'jsdom',

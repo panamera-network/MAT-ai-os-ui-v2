@@ -1,0 +1,8 @@
+.mat-presence-view__orb-frame {
+  /* Significantly larger than the old SVG orb's 240px footprint — the
+     package's canvas is genuinely transparent now (alpha-enabled, cleared
+     to alpha 0), so there's no opaque square to keep contained anymore;
+     this box is purely a sizing/centering box, not a visible boundary. */
+  width: 480px;
+  height: 480px;
+}
