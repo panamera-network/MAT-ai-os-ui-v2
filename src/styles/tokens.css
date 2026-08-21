@@ -11,16 +11,16 @@
   --hud-void: #08080c;
   --hud-surface: rgba(9, 12, 20, 0.56);
   --hud-surface-raised: rgba(19, 22, 33, 0.66);
-  --hud-border: rgba(205, 224, 255, 0.1);
-  --hud-border-strong: rgba(216, 231, 255, 0.2);
+  --hud-border: rgba(184, 163, 255, 0.13);
+  --hud-border-strong: rgba(196, 181, 253, 0.24);
 
   /* optical glass */
   --hud-glass: rgba(10, 13, 22, 0.34);
   --hud-glass-deep: rgba(7, 9, 16, 0.58);
-  --hud-glass-highlight: rgba(239, 246, 255, 0.2);
-  --hud-glass-reflection: rgba(227, 237, 255, 0.055);
-  --hud-cyan: #7de6ff;
-  --hud-cyan-dim: rgba(125, 230, 255, 0.32);
+  --hud-glass-highlight: rgba(221, 214, 254, 0.2);
+  --hud-glass-reflection: rgba(196, 181, 253, 0.06);
+  --hud-cyan: #72e4ff;
+  --hud-cyan-dim: rgba(114, 228, 255, 0.3);
 
   /* text */
   --hud-text: #eef2fb;
@@ -29,8 +29,9 @@
 
   /* accent (presence glow) */
   --hud-accent: #b8a3ff;
-  --hud-accent-dim: rgba(184, 163, 255, 0.4);
-  --hud-accent-glow: rgba(143, 112, 255, 0.18);
+  --hud-accent-bright: #d0c3ff;
+  --hud-accent-dim: rgba(184, 163, 255, 0.42);
+  --hud-accent-glow: rgba(143, 112, 255, 0.22);
 
   /* semantic states */
   --hud-green: #22c55e;

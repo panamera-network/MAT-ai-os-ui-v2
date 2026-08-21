@@ -1,10 +1,10 @@
 .chamber-background {
-  /* A dark navy void, purple structural edges/glow (the app's own
+  /* A purple-black void, purple structural edges/glow (the app's own
      `--hud-accent` — same brand purple as everything else, not a separate
      background-only color), and a fine cyan mesh for texture. */
-  --chamber-void: #050b10;
+  --chamber-void: #070611;
   --chamber-edge: var(--hud-accent);
-  --chamber-grid: #38bdf8;
+  --chamber-grid: #4ba6c8;
   --chamber-glow: var(--hud-accent);
 
   position: absolute;
@@ -47,16 +47,15 @@
   stroke-width: 0.75;
 }
 
-/* Light streaks — a sharp bright dash riding front-to-back on top of a
-   handful of the edge lines. `pathLength="100"` normalizes every line
-   (radial lines have very different real lengths) to the same 0-100 unit
-   range, so one shared dasharray/duration reads as the same travel speed on
-   all of them. */
+/* Light streaks — one long, clean dash per live strand. A single thin stroke
+   keeps the leading and trailing cuts crisp without exposing stacked layers. */
 .chamber-background__surface line.chamber-background__streak {
-  stroke: var(--hud-text);
-  stroke-width: 1.1;
-  opacity: 0.85;
-  stroke-dasharray: 8 92;
+  stroke: var(--hud-cyan);
+  stroke-linecap: butt;
+  stroke-width: 0.85;
+  stroke-dasharray: 22 78;
+  opacity: 0.82;
+  filter: drop-shadow(0 0 2px rgba(114, 228, 255, 0.42));
   animation: chamber-streak 7s linear infinite;
 }
 
@@ -71,15 +70,17 @@
 
 /* Two full ring streaks — a closed loop traced around one depth ring's own
    four corners (see ChamberBackground.tsx's ringPath()), not a single line.
-   Same short/sharp/bright treatment as the line streaks above. Clockwise
-   and counter-clockwise share one keyframe; `animation-direction: reverse`
-   is what gives the second one its opposite sense, not a second keyframe. */
+   Clockwise and counter-clockwise share the same clean single-dash treatment;
+   `animation-direction: reverse` gives the second one its opposite motion. */
 .chamber-background__ring-streak {
   fill: none;
-  stroke: var(--hud-text);
-  stroke-width: 1.1;
-  opacity: 0.85;
-  stroke-dasharray: 3 97;
+  stroke: var(--hud-cyan);
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  stroke-width: 0.85;
+  stroke-dasharray: 14 86;
+  opacity: 0.82;
+  filter: drop-shadow(0 0 2px rgba(114, 228, 255, 0.42));
   vector-effect: non-scaling-stroke;
   animation: chamber-ring-streak 12s linear infinite;
 }
@@ -100,9 +101,9 @@
 /* Soft pulsing nodes — small glowing sparks at a sparse set of grid
    intersections, not one at every crossing. */
 .chamber-background__node {
-  fill: var(--chamber-glow);
+  fill: var(--hud-cyan);
   opacity: 0.5;
-  filter: drop-shadow(0 0 3px var(--chamber-glow));
+  filter: drop-shadow(0 0 3px var(--hud-cyan));
   animation: chamber-node-pulse 4.2s ease-in-out infinite;
 }
 

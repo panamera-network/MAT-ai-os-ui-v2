@@ -13,9 +13,9 @@
   z-index: 3;
   width: 30px;
   height: 30px;
-  border-color: var(--hud-cyan-dim);
+  border-color: var(--hud-accent-dim);
   opacity: 0.58;
-  filter: drop-shadow(0 0 8px rgba(125, 230, 255, 0.16));
+  filter: drop-shadow(0 0 8px rgba(184, 163, 255, 0.18));
   pointer-events: none;
 }
 

@@ -1,15 +1,4 @@
 import './TopBar.css'
-import type { ConnectionState } from '../hooks/useHealth'
-
-interface TopBarProps {
-  connection: ConnectionState
-}
-
-const CORE_STATUS: Record<ConnectionState, string> = {
-  checking: 'CONNECTING',
-  online: 'ONLINE',
-  offline: 'OFFLINE',
-}
 
 function MatMark() {
   return (
@@ -30,7 +19,7 @@ function UtilityIcon({ type }: { type: 'alerts' | 'settings' }) {
 
 /** Header masthead only. Empty utility positions are intentionally visual
  * placeholders until real controls exist; they have no interaction or data. */
-export function TopBar({ connection }: TopBarProps) {
+export function TopBar() {
   return (
     <div className="top-bar">
       <div className="top-bar__brand">
@@ -43,11 +32,6 @@ export function TopBar({ connection }: TopBarProps) {
         <span>MODEL · AUTONOMY · TOOLS</span>
       </div>
       <div className="top-bar__utilities">
-        <span className={`top-bar__core-status is-${connection}`} role="status" aria-live="polite">
-          <span className="top-bar__core-dot" />
-          <span>MAT CORE</span>
-          <strong>{CORE_STATUS[connection]}</strong>
-        </span>
         <span className="top-bar__utility" aria-hidden="true"><UtilityIcon type="alerts" /></span>
         <span className="top-bar__utility" aria-hidden="true"><UtilityIcon type="settings" /></span>
       </div>

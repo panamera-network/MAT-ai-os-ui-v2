@@ -221,6 +221,12 @@ function renderRadialLines(lines: Line[], keyPrefix: string) {
   ))
 }
 
+function renderRingStreak(path: string, direction: 'cw' | 'ccw') {
+  return (
+    <path d={path} pathLength={100} className={`chamber-background__ring-streak chamber-background__ring-streak--${direction}`} />
+  )
+}
+
 function renderCrossLines(lines: CrossLine[], keyPrefix: string) {
   // A distinct, cooler color from the radial (edge) lines — that hue
   // separation is what keeps ten full-width rings reading as "a fine floor/
@@ -265,18 +271,17 @@ export function ChamberBackground() {
             the ellipses below), so the glow is brightest right at the edge
             and fades out toward the ellipse's visible inner curve. */}
         <radialGradient id="chamber-glow-left">
-          <stop offset="0%" stopColor="var(--chamber-glow)" stopOpacity="0.32" />
+          <stop offset="0%" stopColor="var(--chamber-glow)" stopOpacity="0.38" />
           <stop offset="100%" stopColor="var(--chamber-glow)" stopOpacity="0" />
         </radialGradient>
         <radialGradient id="chamber-glow-right">
-          <stop offset="0%" stopColor="var(--chamber-glow)" stopOpacity="0.32" />
+          <stop offset="0%" stopColor="var(--chamber-glow)" stopOpacity="0.38" />
           <stop offset="100%" stopColor="var(--chamber-glow)" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      {/* Navy backdrop, scoped to the chamber only — replaces the app's own
-          purple ambient wash within this area so the palette below doesn't
-          sit on top of a clashing tint. */}
+      {/* Purple-black backdrop, scoped to the chamber only, so the structural
+          purple reads as MAT identity while cyan stays reserved for energy. */}
       <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="var(--chamber-void)" />
 
       {/* Side glow — a curved wash bulging in from each wall, not a flat
@@ -318,8 +323,8 @@ export function ChamberBackground() {
 
       {/* Two full loop streaks — one clockwise, one counter-clockwise —
           tracing a ring's own four corners rather than a single line. */}
-      <path d={ringStreakPaths[0]} pathLength={100} className="chamber-background__ring-streak chamber-background__ring-streak--cw" />
-      <path d={ringStreakPaths[1]} pathLength={100} className="chamber-background__ring-streak chamber-background__ring-streak--ccw" />
+      {renderRingStreak(ringStreakPaths[0], 'cw')}
+      {renderRingStreak(ringStreakPaths[1], 'ccw')}
 
       {nodes.map((node, i) => (
         <circle key={`node-${i}`} cx={node.x} cy={node.y} r={1.8} className="chamber-background__node" style={{ animationDelay: `${node.delay}s` }} />

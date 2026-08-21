@@ -46,7 +46,7 @@ export function HomeScreen() {
     <AppShell
       header={
         <>
-          <TopBar connection={connection} />
+          <TopBar />
           <HudStatus connection={connection} health={health} />
         </>
       }
