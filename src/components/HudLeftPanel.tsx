@@ -4,6 +4,7 @@ import { useLoops } from '../hooks/useLoops'
 import { useModels } from '../hooks/useModels'
 import { useGovernance } from '../hooks/useGovernance'
 import { useMcp } from '../hooks/useMcp'
+import { useSkills } from '../hooks/useSkills'
 import { formatResourceValue } from '../hooks/useVisionResource'
 import './HudLeftPanel.css'
 
@@ -79,13 +80,29 @@ function McpIcon() {
   )
 }
 
+function SkillsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
+      <path
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+        d="M8 1.8 14 5v6L8 14.2 2 11V5L8 1.8Z"
+      />
+      <path stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" d="M8 5.2v5.6M5.6 6.5l4.8 2.8M10.4 6.5 5.6 9.3" />
+    </svg>
+  )
+}
+
 /**
  * Left info zone — compact real-data snapshots: Agents, Loops, LLM/model
- * routing, Governance, MCP. Every value is a direct count/derivation from a
- * real VISION API response, formatted through `formatResourceValue` so
- * "still loading", "MAT unreachable", "request failed", and "loaded but
+ * routing, Governance, MCP, Skills. Every value is a direct count/derivation
+ * from a real VISION API response, formatted through `formatResourceValue`
+ * so "still loading", "MAT unreachable", "request failed", and "loaded but
  * genuinely empty" each read distinctly instead of collapsing into one dash
- * — never a placeholder for a field the API doesn't expose.
+ * — never a placeholder for a field the API doesn't expose. Skills is just a
+ * count today (`useSkills` is the drawer-ready data path — a real skills
+ * list/drawer UI is future work, not this pass's job).
  */
 export function HudLeftPanel() {
   const agents = useAgents()
@@ -93,6 +110,7 @@ export function HudLeftPanel() {
   const models = useModels()
   const governance = useGovernance()
   const mcp = useMcp()
+  const skills = useSkills()
 
   return (
     <div className="hud-left-panel">
@@ -144,6 +162,13 @@ export function HudLeftPanel() {
             <span className="hud-left-panel__value">
               {formatResourceValue(mcp, (d) => `${d.servers.length} servers · ${d.pending_approvals.length} pending`)}
             </span>
+          </div>
+          <div className="hud-left-panel__row">
+            <span className="hud-left-panel__row-icon">
+              <SkillsIcon />
+            </span>
+            <span className="hud-left-panel__label">Skills</span>
+            <span className="hud-left-panel__value">{formatResourceValue(skills, (d) => String(d.skills.length))}</span>
           </div>
         </div>
       </section>

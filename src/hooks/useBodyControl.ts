@@ -10,6 +10,7 @@ interface UseBodyControlResult {
   stop: () => void
   restart: () => void
   watchdog: () => void
+  kill: () => void
 }
 
 /** Fires the real `POST /control/*` actions (OS controls, Glass HUD right
@@ -44,6 +45,11 @@ export function useBodyControl(): UseBodyControlResult {
       void run('Watchdog', async () => {
         const { result } = await api.checkWatchdog()
         return `Watchdog: ${result.action}`
+      }),
+    kill: () =>
+      void run('Kill', async () => {
+        const { result } = await api.killBody()
+        return `Kill: ${result.status}${result.forced ? ' (forced)' : ''}`
       }),
   }
 }

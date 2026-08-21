@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import type { CSSProperties } from 'react'
-import { hasMemoryStats } from '../domain/vision'
-import type { ServiceStatus } from '../domain/vision'
+import type { CSSProperties, FormEvent } from 'react'
+import { CAPABILITIES, TIERS, hasMemoryStats } from '../domain/vision'
+import type { Capability, ServiceStatus, Tier } from '../domain/vision'
 import { useServices } from '../hooks/useServices'
 import { useMemoryStats } from '../hooks/useMemoryStats'
+import { useModels } from '../hooks/useModels'
 import { useBodyControl } from '../hooks/useBodyControl'
 import { useServiceControl } from '../hooks/useServiceControl'
+import { useModelSelect } from '../hooks/useModelSelect'
 import { describeResourceStatus } from '../hooks/useVisionResource'
 import './HudRightPanel.css'
 
@@ -74,6 +76,25 @@ function ShieldIcon() {
   )
 }
 
+function KillIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
+      <path stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
+    </svg>
+  )
+}
+
+function CpuIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
+      <rect x="4.5" y="4.5" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="8" cy="8" r="1.6" stroke="currentColor" strokeWidth="1.1" />
+      <path stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" />
+    </svg>
+  )
+}
+
 function ChevronIcon() {
   return (
     <svg viewBox="0 0 16 16" width="11" height="11" fill="none" aria-hidden="true">
@@ -116,10 +137,12 @@ function ServiceRow({
   service,
   pending,
   onToggle,
+  onRestart,
 }: {
   service: ServiceStatus
   pending: boolean
   onToggle: () => void
+  onRestart: () => void
 }) {
   const on = isServiceOn(service.state)
   const toggleable = isServiceToggleable(service.state)
@@ -131,6 +154,15 @@ function ServiceRow({
       </span>
       <span className="hud-service-row__name">{service.display_name}</span>
       <span className={`hud-service-row__state hud-service-row__state--${service.state}`}>{service.state}</span>
+      <button
+        type="button"
+        className="hud-service-row__restart"
+        aria-label={`Restart ${service.display_name}`}
+        disabled={!toggleable || pending}
+        onClick={onRestart}
+      >
+        <RestartIcon />
+      </button>
       <button
         type="button"
         role="switch"
@@ -145,13 +177,76 @@ function ServiceRow({
   )
 }
 
+function ModelRoutingCard() {
+  const models = useModels()
+  const modelSelect = useModelSelect()
+  const [capability, setCapability] = useState<Capability>(CAPABILITIES[0])
+  const [tier, setTier] = useState<Tier>(TIERS[0])
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    modelSelect.select({ capability, tier, provider: provider.trim() || null, model: model.trim() || null }, models.refetch)
+  }
+
+  return (
+    <section className="hud-right-panel__card">
+      <header className="hud-right-panel__card-header">
+        <CpuIcon />
+        <span>Model Routing</span>
+      </header>
+      <form className="hud-right-panel__model-form" onSubmit={handleSubmit}>
+        <select
+          className="hud-right-panel__model-select"
+          value={capability}
+          onChange={(event) => setCapability(event.target.value as Capability)}
+          aria-label="Capability"
+        >
+          {CAPABILITIES.map((capabilityOption) => (
+            <option key={capabilityOption} value={capabilityOption}>
+              {capabilityOption}
+            </option>
+          ))}
+        </select>
+        <select className="hud-right-panel__model-select" value={tier} onChange={(event) => setTier(event.target.value as Tier)} aria-label="Tier">
+          {TIERS.map((tierOption) => (
+            <option key={tierOption} value={tierOption}>
+              {tierOption}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          className="hud-right-panel__model-input"
+          placeholder="provider"
+          value={provider}
+          onChange={(event) => setProvider(event.target.value)}
+        />
+        <input
+          type="text"
+          className="hud-right-panel__model-input"
+          placeholder="model (empty clears slot)"
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+        />
+        <button type="submit" className="hud-control-button hud-control-button--blue hud-control-button--full" disabled={modelSelect.pending}>
+          Set
+        </button>
+      </form>
+      {modelSelect.lastResult && <span className="hud-right-panel__note">{modelSelect.lastResult}</span>}
+    </section>
+  )
+}
+
 /**
- * Right control zone — real OS controls (`/control/*`), real per-service
- * start/stop toggles (`/services/{id}/start|stop`) with an expand toggle
- * for the rest, and memory usage (`/memory`). No System Metrics or Recent
- * Events section: no throughput/error-rate telemetry or event-log endpoint
- * exists in the VISION API today (see docs/VISION_API_CONTRACT.md) — those
- * would be fabricated, so they're left out rather than faked.
+ * Right control zone — real OS controls (`/control/*`), model routing
+ * (`/models/select`), real per-service start/stop/restart
+ * (`/services/{id}/start|stop|restart`) with an expand toggle for the rest,
+ * and memory usage (`/memory`). No System Metrics or Recent Events section:
+ * no throughput/error-rate telemetry or event-log endpoint exists in the
+ * VISION API today (see docs/VISION_API_CONTRACT.md) — those would be
+ * fabricated, so they're left out rather than faked.
  */
 export function HudRightPanel() {
   const services = useServices()
@@ -172,6 +267,7 @@ export function HudRightPanel() {
       service={service}
       pending={serviceControl.pendingId === service.id}
       onToggle={() => serviceControl.toggle(service, services.refetch)}
+      onRestart={() => serviceControl.restart(service, services.refetch)}
     />
   )
 
@@ -219,9 +315,20 @@ export function HudRightPanel() {
             <ShieldIcon />
             Watchdog
           </button>
+          <button
+            type="button"
+            className="hud-control-button hud-control-button--red hud-control-button--full"
+            onClick={control.kill}
+            disabled={control.pending}
+          >
+            <KillIcon />
+            Force Kill
+          </button>
         </div>
         {control.lastResult && <span className="hud-right-panel__note">{control.lastResult}</span>}
       </section>
+
+      <ModelRoutingCard />
 
       <section className="hud-right-panel__card">
         <header className="hud-right-panel__card-header">

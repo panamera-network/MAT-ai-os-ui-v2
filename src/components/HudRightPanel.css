@@ -103,6 +103,13 @@
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
 }
 
+/* Spans both grid columns — used for the rarer, more consequential actions
+   (Force Kill, the model-select Set button) so they read as distinct from
+   the routine 2-up grid above them, not for decoration. */
+.hud-control-button--full {
+  grid-column: 1 / -1;
+}
+
 .hud-right-panel__service-list {
   display: flex;
   flex-direction: column;
@@ -111,11 +118,36 @@
 
 .hud-service-row {
   display: grid;
-  grid-template-columns: 14px 1fr auto auto;
+  grid-template-columns: 14px 1fr auto auto auto;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) 0;
   color: var(--hud-text-muted);
+}
+
+.hud-service-row__restart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--hud-text-faint);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.hud-service-row__restart:hover:not(:disabled) {
+  color: var(--hud-text-muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hud-service-row__restart:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .hud-service-row__icon {
@@ -214,6 +246,30 @@
   display: inline-flex;
   transition: transform 0.18s ease;
   transform: rotate(var(--chevron-rotate, 0deg));
+}
+
+.hud-right-panel__model-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.hud-right-panel__model-select,
+.hud-right-panel__model-input {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--hud-border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(16, 16, 21, 0.6);
+  color: var(--hud-text-muted);
+  font-family: var(--hud-font-mono);
+  font-size: 9px;
+}
+
+.hud-right-panel__model-select:focus,
+.hud-right-panel__model-input:focus {
+  outline: none;
+  border-color: var(--hud-accent);
 }
 
 .hud-right-panel__stat-row {

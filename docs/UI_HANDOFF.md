@@ -24,9 +24,9 @@ Three stacked layers inside `.hud-shell`, siblings — not nested:
 | Zone | Component | Content |
 |---|---|---|
 | Header (row 1, full width) | `TopBar` + `HudStatus` + `CanvasSwitcher` | brand mark, global MAT identity/health, view switcher |
-| Left (row 2, col 1) | `HudLeftPanel` | Agents / Loops / LLM / Governance / MCP snapshot |
+| Left (row 2, col 1) | `HudLeftPanel` | Agents / Loops / LLM / Governance / MCP / Skills snapshot |
 | **Center (row 2, col 2)** | — | **deliberately empty** — nothing is ever placed here, so Active Canvas stays fully visible/unobstructed |
-| Right (row 2, col 3) | `HudRightPanel` | OS Controls, Service Controls, Memory Health |
+| Right (row 2, col 3) | `HudRightPanel` | OS Controls (incl. Force Kill), Model Routing, Service Controls (start/stop/restart), Memory Health |
 | Bottom-center (row 3) | `GlassChatPanel` → `ActivityPanel` | chat, collapsible |
 
 `CanvasSwitcher` is explicitly a **temporary** stand-in (its own doc comment
@@ -66,20 +66,42 @@ hits.
 | `useHealth` (polls 5s) | `GET /health` | `HudStatus`, both `MatPresenceView` and `HomeScreen` independently, `ActivityPanel`'s online gate | connection state, `active_model.{provider,model}`, `body.*` → body label, `degraded.*` → config notes |
 | `useAgents` | `GET /agents` | `HudLeftPanel` | `agents.length` |
 | `useLoops` | `GET /loops` | `HudLeftPanel` | active-count / total from `loops[].status` |
-| `useModels` | `GET /models` | `HudLeftPanel` | count of non-null slots across the 8×4 capability/tier `profiles` matrix |
+| `useModels` | `GET /models` | `HudLeftPanel`, `HudRightPanel`'s `ModelRoutingCard` (own independent call) | count of non-null slots across the 8×4 capability/tier `profiles` matrix |
 | `useGovernance` | `GET /governance` | `HudLeftPanel` | `laws.active_count`, `lifecycle.total_cases` |
 | `useMcp` | `GET /mcp` | `HudLeftPanel` | `servers.length`, `pending_approvals.length` |
+| `useSkills` | `GET /skills` | `HudLeftPanel` | `skills.length` — see "Skills surface" below for why it's just a count today |
 | `useServices` | `GET /services` | `HudRightPanel` | `id`, `display_name`, `state` per service |
-| `useServiceControl` | `POST /services/{id}/start|stop` | `HudRightPanel`'s per-service toggle | real request; row re-renders only after `services.refetch()`, no optimistic flip |
+| `useServiceControl` | `POST /services/{id}/start\|stop\|restart` | `HudRightPanel`'s per-service toggle + restart icon | real request; row re-renders only after `services.refetch()`, no optimistic flip |
 | `useMemoryStats` | `GET /memory` | `HudRightPanel` | `total_memories`, `estimated_size_bytes` (guarded by `hasMemoryStats()` — `tiers` can legitimately be `{}`) |
-| `useBodyControl` | `POST /control/start|stop|restart|watchdog-check` | `HudRightPanel`'s OS Controls | echoes each response's real `status`/`action` field verbatim as `lastResult` |
+| `useBodyControl` | `POST /control/start\|stop\|restart\|watchdog-check\|kill` | `HudRightPanel`'s OS Controls (incl. Force Kill) | echoes each response's real `status`/`action` field verbatim as `lastResult` |
+| `useModelSelect` | `POST /models/select` | `HudRightPanel`'s `ModelRoutingCard` | capability + tier dropdowns, provider + model text inputs; empty provider/model clears that slot (the API's own semantics); echoes the real outcome as `lastResult`, refetches `useModels()` on settle |
 | `useThink` | `POST /think` | `GlassChatPanel` → `ActivityPanel` | full conversation flow |
 
-**Not wired to any hook/UI yet** (adapter methods exist, nothing calls
-them): `getSkills` (`GET /skills`), `selectModel` (`POST /models/select`),
-`restartService` (`POST /services/{id}/restart` — only start/stop is wired
-today), `getSoul`, `getIdentity`. None of these are bugs — they're simply
-not part of any zone spec given to this pass.
+### Skills surface
+
+`useSkills()` is a thin `useVisionResource` wrapper — the same shape as
+every other snapshot hook, genuinely fetching `GET /skills`. Today it's
+consumed as one more compact count row in `HudLeftPanel` ("SKILLS · N"),
+matching this pass's instruction to wire it into a "non-intrusive
+surface/drawer-ready data path" rather than invent a skills list/drawer UI.
+The hook itself has no UI opinion — a future skills drawer/browser can call
+`useSkills()` directly with no changes to the data layer.
+
+### Adapter methods audited and left intentionally unwired
+
+Every `VisionApiAdapter` method was checked. Everything above is now wired.
+What's left, and why:
+
+| Method | Endpoint | Why unwired |
+|---|---|---|
+| `getSoul` | `GET /soul` | No existing HUD zone is "MAT's persona/soul" — wiring it would mean inventing a new UI surface, not filling a gap in an existing one. Same reasoning as Skills, but there's no established "count row" pattern that fits soul_prompt/response_styles/safety_rules. |
+| `getIdentity` | `GET /identity` | Same as `getSoul` — no natural existing surface; wiring it means designing new UX, which this pass was told not to do. |
+| `getControlStatus` | `GET /control/status` | Redundant with `useHealth()`'s `health.body` (`body_attached`/`running`/`degraded`), already shown in `HudStatus` and implicitly informing OS Controls. A second poller for the same data isn't a real gap. |
+| `getService` | `GET /services/{id}` | Redundant with `useServices()`'s list, which `HudRightPanel` already has in full. No UI need for fetching one service in isolation. |
+| `see`, `listen`, `speak` | `POST /see\|listen\|speak` | Multi-modal (image upload, audio record/playback) — wiring any of these means building real new interaction surfaces (file picker, mic capture, audio player), which is exactly the "invent new UX" this pass was told to avoid. Legitimate future feature work, not a wiring gap. |
+
+None of these are bugs. They're the honest boundary of "wire what clearly
+belongs somewhere that already exists" versus "design a new feature."
 
 ## Standardized loading / offline / degraded / empty states
 
@@ -103,8 +125,8 @@ just not the same helper. Worth noting, not worth unifying without a reason.
 
 ## Component / data boundaries
 
-- **Presentational components never call the adapter directly** — `HudLeftPanel`/`HudRightPanel`/`HudStatus`/`ActivityPanel`/`PresenceHero` all take data via hooks or props only.
-- **Every adapter call lives in `src/hooks/`.** Most snapshot hooks are thin wrappers around the shared `useVisionResource<T>(fetcher)` (fetch-on-mount, `{data, error, loading, refetch}`). `useHealth` (polls) and `useThink`/`useBodyControl`/`useServiceControl` (mutation-only, no GET) are hand-rolled since their shape doesn't fit that pattern.
+- **Presentational components never call the adapter directly** — `HudLeftPanel`/`HudRightPanel`/`HudStatus`/`ActivityPanel`/`PresenceHero` all take data via hooks or props only. `ModelRoutingCard` (a small function component inside `HudRightPanel.tsx`) still only talks to `useModels`/`useModelSelect`, same rule.
+- **Every adapter call lives in `src/hooks/`.** Most snapshot hooks are thin wrappers around the shared `useVisionResource<T>(fetcher)` (fetch-on-mount, `{data, error, loading, refetch}`). `useHealth` (polls) and `useThink`/`useBodyControl`/`useServiceControl`/`useModelSelect` (mutation-only, no GET) are hand-rolled since their shape doesn't fit that pattern.
 - **Each hook owns its own request** — no shared cache/context. `useHealth` is called independently in three places (`HomeScreen`, `MatPresenceView`, implicitly by `ActivityPanel`'s prop from `HomeScreen`) and each polls on its own 5s timer. This is simple and already-established, not something this pass changed.
 - **`components/README.md` and `canvas-views/README.md`** document this convention in-repo; both are current.
 
@@ -132,16 +154,26 @@ fake data, not an instance of one.
 
 ## Known functional gaps (for Codex, before touching visuals)
 
+The functional wiring pass is complete — every adapter method that clearly
+belongs to an existing zone is wired (Agents/Loops/LLM/Governance/MCP/Skills
+snapshots, OS Controls incl. Force Kill, Model Routing, per-service
+start/stop/restart, Memory Health). What's left is either deliberately
+out of scope (mock data, no real source) or deliberately not invented
+(no existing surface to attach it to):
+
 - **No real navigation.** `CanvasSwitcher` is a temporary header control;
   there's no route/screen system behind it.
-- **Brain View has no real data source** (see above) — redesign its visuals
-  freely, but its content is fixture data, not live.
-- **Skills** (`GET /skills`) isn't surfaced anywhere in the UI.
-- **Models are read-only** — no UI calls `POST /models/select`.
-- **Services**: only start/stop is wired (via toggle); `restartService`
-  exists on the adapter but nothing calls it.
+- **Brain View has no real data source** (see "Active Canvas views" above)
+  — redesign its visuals freely, but its content is fixture data, not live.
+- **Skills is a count, not a browser.** `useSkills()` is real and
+  drawer-ready; there's no drawer/list UI yet (see "Skills surface" above).
 - **MCP approvals are read-only** — the API itself has no approve/deny
   route, so `pending_approvals` can only ever be *displayed*, never acted on.
+- **Soul/Identity, single-service GET, and the multi-modal endpoints
+  (`see`/`listen`/`speak`) are intentionally unwired** — see "Adapter
+  methods audited and left intentionally unwired" above for why each one
+  specifically doesn't have an existing surface to attach to without
+  inventing new UX.
 - **`ChamberBackground` is locked** — do not restyle without an explicit,
   deliberate request; it went through several dedicated tuning passes.
 - **Icon sets are per-file, not shared** — `HudLeftPanel.tsx` and
