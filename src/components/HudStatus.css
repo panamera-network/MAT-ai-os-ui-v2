@@ -1,0 +1,64 @@
+.hud-status {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-family: var(--hud-font-mono);
+}
+
+.hud-status__identity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.hud-status__name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--hud-text);
+}
+
+.hud-status__connection {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--hud-text-muted);
+}
+
+.hud-status__connection--online {
+  color: var(--hud-green);
+}
+
+.hud-status__connection--checking {
+  color: var(--hud-amber);
+}
+
+.hud-status__connection--offline {
+  color: var(--hud-red);
+}
+
+.hud-status__field {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: 10px;
+}
+
+.hud-status__field-label {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hud-text-faint);
+}
+
+.hud-status__field-value {
+  color: var(--hud-text-muted);
+}
+
+.hud-status__note {
+  font-size: 10px;
+  color: var(--hud-text-faint);
+}
+
+.hud-status__note--warn {
+  color: var(--hud-amber);
+}

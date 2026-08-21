@@ -1,22 +1,24 @@
 import type { ReactNode } from 'react'
 import { ChamberBackground } from './ChamberBackground'
+import { GlassHud } from './GlassHud'
 import './AppShell.css'
 
 interface AppShellProps {
   header: ReactNode
+  left?: ReactNode
+  right?: ReactNode
+  centerChat?: ReactNode
   children: ReactNode
 }
 
 /**
- * The persistent full-window HUD frame: a wireframe chamber backdrop, one
- * header strip (identity + connection chrome), and one content region. No
- * sidebar, no tab rail — "MAT is a presence, not a dashboard." Deliberately
- * structural only beyond the backdrop (no data fetching, no nav items) so it
- * can host future screens without carrying today's Home-specific content;
- * there is nothing to navigate to yet, so nothing is added here beyond this
- * one persistent header.
+ * The persistent full-window HUD frame — three stacked layers, in order:
+ * `ChamberBackground` (locked, decorative), the Active Canvas layer
+ * (`children`), and `GlassHud` on top. The HUD overlays Active Canvas; it
+ * never wraps or contains it — they're siblings here, not parent/child, so
+ * Active Canvas always renders full-bleed underneath whatever the HUD shows.
  */
-export function AppShell({ header, children }: AppShellProps) {
+export function AppShell({ header, left, right, centerChat, children }: AppShellProps) {
   return (
     <div className="hud-shell">
       <ChamberBackground />
@@ -24,8 +26,8 @@ export function AppShell({ header, children }: AppShellProps) {
       <span className="hud-shell__corner hud-shell__corner--tr" aria-hidden="true" />
       <span className="hud-shell__corner hud-shell__corner--bl" aria-hidden="true" />
       <span className="hud-shell__corner hud-shell__corner--br" aria-hidden="true" />
-      <header className="hud-shell__header">{header}</header>
-      <main className="hud-shell__content">{children}</main>
+      <main className="hud-shell__canvas-layer">{children}</main>
+      <GlassHud header={header} left={left} right={right} centerChat={centerChat} />
     </div>
   )
 }

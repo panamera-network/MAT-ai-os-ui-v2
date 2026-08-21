@@ -1,0 +1,46 @@
+.glass-chat-panel {
+  width: min(640px, 86vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.glass-chat-panel__toggle {
+  /* Fixed size/position regardless of expanded state — only its glyph
+     (▴/▾) changes, so it always reads as the same handle. */
+  width: 28px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  background: rgba(16, 16, 21, 0.6);
+  color: var(--hud-text-faint);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.glass-chat-panel__toggle:hover {
+  color: var(--hud-text-muted);
+}
+
+.glass-chat-panel__body {
+  width: 100%;
+  height: 108px;
+  overflow: hidden;
+  transition: height 0.25s ease;
+}
+
+.glass-chat-panel__body.is-expanded {
+  height: 420px;
+}
+
+/* Overrides ActivityPanel's own flex-sibling sizing (tuned for when it sat
+   directly in a flex column) — here it fills this fixed/animated-height box
+   instead, and doesn't need the side/bottom margin now that it's a floating
+   panel rather than spanning the full content width. */
+.glass-chat-panel__body .activity-panel {
+  height: 100%;
+  margin: 0;
+}

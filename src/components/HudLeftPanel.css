@@ -1,0 +1,71 @@
+.hud-left-panel {
+  width: max-content;
+  max-width: 220px;
+  font-family: var(--hud-font-mono);
+  font-size: 10px;
+}
+
+.hud-left-panel__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--hud-border);
+  /* Edge highlight on the side facing the screen edge this zone is
+     anchored to — mirrors the right panel's right-edge highlight. */
+  border-left: 2px solid var(--hud-accent-dim);
+  background: rgba(16, 16, 21, 0.45);
+  backdrop-filter: blur(6px);
+  /* Cut top-left / bottom-right corners — mirrors the right panel's
+     top-right/bottom-left cut, same sci-fi HUD panel cue. */
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.hud-left-panel__card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--hud-text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.hud-left-panel__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-left-panel__row {
+  display: grid;
+  grid-template-columns: 14px auto 1fr;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hud-left-panel__row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.hud-left-panel__row-icon {
+  display: flex;
+  align-self: center;
+  color: var(--hud-text-faint);
+}
+
+.hud-left-panel__label {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hud-text-faint);
+}
+
+.hud-left-panel__value {
+  color: var(--hud-text-muted);
+  text-align: right;
+  font-weight: 560;
+}

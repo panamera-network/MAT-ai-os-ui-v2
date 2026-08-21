@@ -17,18 +17,17 @@ const CONNECTION_TO_PRESENCE_STATE: Record<ConnectionState, MatPresenceState> = 
 
 /**
  * The MAT Presence canvas view — today's default. Owns its own data (the
- * health poll) so `ActiveCanvas` never has to know what any given view
- * needs. Renders the `@panamera-network/mat-presence-orb` package's
- * `MatPresence` as the orb visual, wrapped in `PresenceHero` for the
- * surrounding readouts/caption (unchanged from before this swap).
+ * health poll, used only to drive the orb's visual state) so `ActiveCanvas`
+ * never has to know what any given view needs. Renders the
+ * `@panamera-network/mat-presence-orb` package's `MatPresence`, wrapped in
+ * `PresenceHero` purely for centering — identity/readout chrome now lives in
+ * the Glass HUD (`HudStatus`) instead, fed by `HomeScreen`'s own health poll.
  */
 export function MatPresenceView() {
-  const { connection, health } = useHealth()
+  const { connection } = useHealth()
 
   return (
     <PresenceHero
-      connection={connection}
-      health={health}
       orb={
         <div className="mat-presence-view__orb-frame">
           {/* No real audio/activity signal exists yet (voice pipeline, agent

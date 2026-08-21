@@ -1,8 +1,6 @@
 .hud-shell {
   position: relative;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
   height: 100%;
   width: 100%;
 }
@@ -46,20 +44,12 @@
   border-right: 1px solid;
 }
 
-.hud-shell__header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-6);
-  border-bottom: 1px solid var(--hud-border);
-  background: rgba(16, 16, 21, 0.6);
-  backdrop-filter: blur(8px);
-}
-
-.hud-shell__content {
-  flex: 1 1 auto;
-  min-height: 0;
+.hud-shell__canvas-layer {
+  /* The Active Canvas layer — full-bleed under the Glass HUD (see
+     GlassHud.css for the overlay layer stacked above this). */
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
 }

@@ -1,0 +1,52 @@
+.glass-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(160px, auto) 1fr minmax(160px, auto);
+  grid-template-rows: auto 1fr auto;
+  /* The overlay itself never blocks clicks to Active Canvas underneath —
+     each zone below opts back in with pointer-events: auto. The empty
+     center cell (column 2 / row 2) is what "keep the center open" means
+     structurally: nothing is ever placed there. */
+  pointer-events: none;
+}
+
+.glass-hud__header {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--hud-border);
+  background: rgba(16, 16, 21, 0.6);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.glass-hud__left {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+  padding: var(--space-5);
+  pointer-events: auto;
+}
+
+.glass-hud__right {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: start;
+  padding: var(--space-5);
+  pointer-events: auto;
+}
+
+.glass-hud__chat {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  justify-self: center;
+  align-self: end;
+  padding-bottom: var(--space-6);
+  pointer-events: auto;
+}
