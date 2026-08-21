@@ -12,7 +12,7 @@ interface CanvasSwitcherProps {
 }
 
 /**
- * Temporary header-only control for switching `ActiveCanvas`'s mounted view
+ * Temporary left-zone control for switching `ActiveCanvas`'s mounted view
  * while there's no real navigation system yet. Purely a controlled input —
  * the view state itself lives in `HomeScreen`, same place `ActiveCanvas`'s
  * `view` prop already came from.

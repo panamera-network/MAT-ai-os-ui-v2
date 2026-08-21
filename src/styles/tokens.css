@@ -9,20 +9,28 @@
 :root {
   /* surfaces */
   --hud-void: #08080c;
-  --hud-surface: #101015;
-  --hud-surface-raised: #16161d;
-  --hud-border: rgba(255, 255, 255, 0.08);
-  --hud-border-strong: rgba(255, 255, 255, 0.16);
+  --hud-surface: rgba(9, 12, 20, 0.56);
+  --hud-surface-raised: rgba(19, 22, 33, 0.66);
+  --hud-border: rgba(205, 224, 255, 0.1);
+  --hud-border-strong: rgba(216, 231, 255, 0.2);
+
+  /* optical glass */
+  --hud-glass: rgba(10, 13, 22, 0.34);
+  --hud-glass-deep: rgba(7, 9, 16, 0.58);
+  --hud-glass-highlight: rgba(239, 246, 255, 0.2);
+  --hud-glass-reflection: rgba(227, 237, 255, 0.055);
+  --hud-cyan: #7de6ff;
+  --hud-cyan-dim: rgba(125, 230, 255, 0.32);
 
   /* text */
-  --hud-text: #e8e8f0;
-  --hud-text-muted: #94949f;
-  --hud-text-faint: #5a5a66;
+  --hud-text: #eef2fb;
+  --hud-text-muted: #a2a9ba;
+  --hud-text-faint: #646b7d;
 
   /* accent (presence glow) */
-  --hud-accent: #a78bfa;
-  --hud-accent-dim: rgba(167, 139, 250, 0.4);
-  --hud-accent-glow: rgba(139, 92, 246, 0.22);
+  --hud-accent: #b8a3ff;
+  --hud-accent-dim: rgba(184, 163, 255, 0.4);
+  --hud-accent-glow: rgba(143, 112, 255, 0.18);
 
   /* semantic states */
   --hud-green: #22c55e;
@@ -33,6 +41,7 @@
   /* type */
   --hud-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --hud-font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  --hud-font-boost: 1px;
 
   /* spacing scale */
   --space-1: 4px;

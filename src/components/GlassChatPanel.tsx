@@ -10,11 +10,7 @@ interface GlassChatPanelProps {
   onSend: (text: string) => void
 }
 
-/**
- * The Glass HUD's bottom-center chat zone. Owns only expand/collapse state;
- * `ActivityPanel` itself is untouched and still owns message rendering and
- * the input row.
- */
+/** Bottom-center chat, anchored to the bottom and expanding upward. */
 export function GlassChatPanel({ online, messages, pending, onSend }: GlassChatPanelProps) {
   const [expanded, setExpanded] = useState(false)
 

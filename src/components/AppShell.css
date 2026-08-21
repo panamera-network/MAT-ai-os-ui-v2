@@ -3,43 +3,46 @@
   overflow: hidden;
   height: 100%;
   width: 100%;
+  isolation: isolate;
 }
 
 /* Subtle technical framing — four corner brackets, nothing else. Purely
    decorative chrome, not interactive or informational. */
 .hud-shell__corner {
   position: fixed;
-  width: 22px;
-  height: 22px;
-  border-color: var(--hud-border-strong);
-  opacity: 0.7;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border-color: var(--hud-cyan-dim);
+  opacity: 0.58;
+  filter: drop-shadow(0 0 8px rgba(125, 230, 255, 0.16));
   pointer-events: none;
 }
 
 .hud-shell__corner--tl {
-  top: 14px;
-  left: 14px;
+  top: 12px;
+  left: 12px;
   border-top: 1px solid;
   border-left: 1px solid;
 }
 
 .hud-shell__corner--tr {
-  top: 14px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
   border-top: 1px solid;
   border-right: 1px solid;
 }
 
 .hud-shell__corner--bl {
-  bottom: 14px;
-  left: 14px;
+  bottom: 12px;
+  left: 12px;
   border-bottom: 1px solid;
   border-left: 1px solid;
 }
 
 .hud-shell__corner--br {
-  bottom: 14px;
-  right: 14px;
+  bottom: 12px;
+  right: 12px;
   border-bottom: 1px solid;
   border-right: 1px solid;
 }

@@ -1,19 +1,24 @@
 import { useState } from 'react'
-import type { CSSProperties, FormEvent } from 'react'
-import { CAPABILITIES, TIERS, hasMemoryStats } from '../domain/vision'
-import type { Capability, ServiceStatus, Tier } from '../domain/vision'
+import type { CSSProperties } from 'react'
+import { hasMemoryStats } from '../domain/vision'
+import type { ServiceStatus } from '../domain/vision'
 import { useServices } from '../hooks/useServices'
 import { useMemoryStats } from '../hooks/useMemoryStats'
-import { useModels } from '../hooks/useModels'
 import { useBodyControl } from '../hooks/useBodyControl'
 import { useServiceControl } from '../hooks/useServiceControl'
-import { useModelSelect } from '../hooks/useModelSelect'
 import { describeResourceStatus } from '../hooks/useVisionResource'
+import type { AddHudEvent, HudEvent, HudEventTone } from './hudEvents'
 import './HudRightPanel.css'
 
-/** The two services shown by default — `vision` is the MAT/Body process
- * everything else depends on; the rest live behind "View all services". */
-const DEFAULT_SERVICE_IDS = ['vision', 'strategy_engine']
+/** The four primary service controls surfaced in the command-center HUD. */
+const PRIMARY_SERVICES = [
+  { id: 'strategy_engine', label: 'Strategy Engine' },
+  { id: 'engine_dashboard', label: 'Engine Dashboard' },
+  { id: 'os_ui_mobile', label: 'OS UI Mobile' },
+  { id: 'mk1_x', label: 'MK1-X' },
+]
+
+const DEFAULT_SERVICE_IDS = PRIMARY_SERVICES.map((service) => service.id)
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -85,16 +90,6 @@ function KillIcon() {
   )
 }
 
-function CpuIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
-      <rect x="4.5" y="4.5" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="8" cy="8" r="1.6" stroke="currentColor" strokeWidth="1.1" />
-      <path stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" />
-    </svg>
-  )
-}
-
 function ChevronIcon() {
   return (
     <svg viewBox="0 0 16 16" width="11" height="11" fill="none" aria-hidden="true">
@@ -113,6 +108,15 @@ function DriveIcon() {
   )
 }
 
+function MemoryStackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true">
+      <path d="m4 8 8-4 8 4-8 4-8-4Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="m4 12 8 4 8-4M4 16l8 4 8-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function ServiceIcon() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
@@ -120,6 +124,26 @@ function ServiceIcon() {
       <circle cx="5.2" cy="8" r="0.9" fill="currentColor" />
     </svg>
   )
+}
+
+function EventsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
+      <path stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" d="M3 3.5h10M3 8h10M3 12.5h10" />
+      <circle cx="3" cy="3.5" r="1.2" fill="currentColor" />
+      <circle cx="3" cy="8" r="1.2" fill="currentColor" />
+      <circle cx="3" cy="12.5" r="1.2" fill="currentColor" />
+    </svg>
+  )
+}
+
+function formatEventTime(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(timestamp))
 }
 
 /** Toggle "on" position for `running`/`degraded` (the service is up, even
@@ -168,87 +192,77 @@ function ServiceRow({
         role="switch"
         aria-checked={on}
         aria-label={`${on ? 'Stop' : 'Start'} ${service.display_name}`}
-        className="hud-service-toggle"
+        className={`hud-service-power hud-service-power--${on ? 'stop' : 'start'}`}
         data-state={service.state}
         disabled={!toggleable || pending}
         onClick={onToggle}
-      />
+      >
+        {on ? <StopIcon /> : <PlayIcon />}
+      </button>
     </div>
   )
 }
 
-function ModelRoutingCard() {
-  const models = useModels()
-  const modelSelect = useModelSelect()
-  const [capability, setCapability] = useState<Capability>(CAPABILITIES[0])
-  const [tier, setTier] = useState<Tier>(TIERS[0])
-  const [provider, setProvider] = useState('')
-  const [model, setModel] = useState('')
-
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault()
-    modelSelect.select({ capability, tier, provider: provider.trim() || null, model: model.trim() || null }, models.refetch)
-  }
-
+function UnavailableServiceRow({ label, status }: { label: string; status: string }) {
   return (
-    <section className="hud-right-panel__card">
-      <header className="hud-right-panel__card-header">
-        <CpuIcon />
-        <span>Model Routing</span>
-      </header>
-      <form className="hud-right-panel__model-form" onSubmit={handleSubmit}>
-        <select
-          className="hud-right-panel__model-select"
-          value={capability}
-          onChange={(event) => setCapability(event.target.value as Capability)}
-          aria-label="Capability"
-        >
-          {CAPABILITIES.map((capabilityOption) => (
-            <option key={capabilityOption} value={capabilityOption}>
-              {capabilityOption}
-            </option>
-          ))}
-        </select>
-        <select className="hud-right-panel__model-select" value={tier} onChange={(event) => setTier(event.target.value as Tier)} aria-label="Tier">
-          {TIERS.map((tierOption) => (
-            <option key={tierOption} value={tierOption}>
-              {tierOption}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          className="hud-right-panel__model-input"
-          placeholder="provider"
-          value={provider}
-          onChange={(event) => setProvider(event.target.value)}
-        />
-        <input
-          type="text"
-          className="hud-right-panel__model-input"
-          placeholder="model (empty clears slot)"
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-        />
-        <button type="submit" className="hud-control-button hud-control-button--blue hud-control-button--full" disabled={modelSelect.pending}>
-          Set
-        </button>
-      </form>
-      {modelSelect.lastResult && <span className="hud-right-panel__note">{modelSelect.lastResult}</span>}
-    </section>
+    <div className="hud-service-row">
+      <span className="hud-service-row__icon"><ServiceIcon /></span>
+      <span className="hud-service-row__name">{label}</span>
+      <span className="hud-service-row__state">{status}</span>
+      <button type="button" className="hud-service-row__restart" aria-label={`Restart ${label}`} disabled>
+        <RestartIcon />
+      </button>
+      <button type="button" className="hud-service-power hud-service-power--start" aria-label={`Start ${label}`} disabled>
+        <PlayIcon />
+      </button>
+    </div>
   )
 }
 
-/**
- * Right control zone — real OS controls (`/control/*`), model routing
- * (`/models/select`), real per-service start/stop/restart
- * (`/services/{id}/start|stop|restart`) with an expand toggle for the rest,
- * and memory usage (`/memory`). No System Metrics or Recent Events section:
- * no throughput/error-rate telemetry or event-log endpoint exists in the
- * VISION API today (see docs/VISION_API_CONTRACT.md) — those would be
- * fabricated, so they're left out rather than faked.
- */
-export function HudRightPanel() {
+function RecentEvents({ events }: { events: HudEvent[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const visibleEvents = expanded ? events : events.slice(0, 5)
+
+  return (
+    <div className="hud-right-panel__events-slot">
+      <section className={`hud-right-panel__card hud-right-panel__events-card${expanded ? ' is-expanded' : ''}`}>
+        <header className="hud-right-panel__card-header hud-right-panel__events-header">
+          <span className="hud-right-panel__events-title">
+            <EventsIcon />
+            Recent Events
+          </span>
+          <button
+            type="button"
+            className="hud-right-panel__events-header-toggle"
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+          >
+            {expanded ? 'Collapse' : 'View all'}
+          </button>
+        </header>
+        <div className="hud-right-panel__events-list">
+          {visibleEvents.length > 0 ? visibleEvents.map((event) => (
+            <div key={event.id} className="hud-event-row">
+              <span className={`hud-event-row__dot hud-event-row__dot--${event.tone}`} aria-hidden="true" />
+              <time dateTime={new Date(event.timestamp).toISOString()}>{formatEventTime(event.timestamp)}</time>
+              <span className="hud-event-row__message">{event.message}</span>
+            </div>
+          )) : (
+            <span className="hud-right-panel__events-empty">Actions in this session will appear here.</span>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+interface HudRightPanelProps {
+  events: HudEvent[]
+  onEvent: AddHudEvent
+}
+
+/** Right-side controls, memory health, and honest session-local actions. */
+export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
   const services = useServices()
   const memory = useMemoryStats()
   const control = useBodyControl()
@@ -256,18 +270,57 @@ export function HudRightPanel() {
   const [showAllServices, setShowAllServices] = useState(false)
 
   const allServices = services.data?.services ?? []
-  const defaultServices = allServices.filter((service) => DEFAULT_SERVICE_IDS.includes(service.id))
+  const primaryServiceSlots = PRIMARY_SERVICES.map((target) => ({
+    ...target,
+    service: allServices.find((service) => service.id === target.id),
+  }))
   const otherServices = allServices.filter((service) => !DEFAULT_SERVICE_IDS.includes(service.id))
   const servicesStatus = describeResourceStatus(services)
-  const memoryStatus = describeResourceStatus(memory)
+  const memoryStats = memory.data && hasMemoryStats(memory.data.tiers) ? memory.data.tiers : null
+  const memoryLoading = memory.loading && !memory.data
+  const qdrantState = memoryStats
+    ? 'online'
+    : memory.data?.body_attached
+      ? 'degraded'
+      : memory.error && !memory.error.unreachable
+        ? 'degraded'
+        : memoryLoading
+          ? 'checking'
+          : 'offline'
+  const memoryModuleState = memoryStats ? 'ready' : 'unavailable'
+  const vectorStoreState = memoryStats ? 'connected' : 'disconnected'
+  const tierMetrics = [
+    { label: 'Hot', value: memoryStats?.counts.hot ?? 0 },
+    { label: 'Warm', value: memoryStats?.counts.warm ?? 0 },
+    { label: 'Cold', value: memoryStats?.counts.cold ?? 0 },
+    { label: 'Archive', value: memoryStats?.counts.archive ?? 0 },
+  ]
+  const maxTierCount = Math.max(1, ...tierMetrics.map((tierMetric) => tierMetric.value))
+  const activeShare = memoryStats && memoryStats.total_memories > 0
+    ? Math.round(((memoryStats.counts.hot + memoryStats.counts.warm) / memoryStats.total_memories) * 100)
+    : 0
+  const memoryNote = memory.error?.detail
+    ?? (memory.data?.body_attached && !memoryStats ? 'Memory backend returned no statistics.' : null)
+
+  const runControl = (label: string, tone: HudEventTone, action: () => void) => {
+    onEvent(`${label} requested`, tone)
+    action()
+  }
 
   const renderServiceRow = (service: ServiceStatus) => (
     <ServiceRow
       key={service.id}
       service={service}
       pending={serviceControl.pendingId === service.id}
-      onToggle={() => serviceControl.toggle(service, services.refetch)}
-      onRestart={() => serviceControl.restart(service, services.refetch)}
+      onToggle={() => {
+        const stopping = isServiceOn(service.state)
+        onEvent(`${stopping ? 'Stop' : 'Start'} ${service.display_name} requested`, stopping ? 'warning' : 'success')
+        serviceControl.toggle(service, services.refetch)
+      }}
+      onRestart={() => {
+        onEvent(`${service.display_name} restart requested`, 'warning')
+        serviceControl.restart(service, services.refetch)
+      }}
     />
   )
 
@@ -282,7 +335,7 @@ export function HudRightPanel() {
           <button
             type="button"
             className="hud-control-button hud-control-button--blue"
-            onClick={control.start}
+            onClick={() => runControl('Start OS', 'success', control.start)}
             disabled={control.pending}
           >
             <PlayIcon />
@@ -291,7 +344,7 @@ export function HudRightPanel() {
           <button
             type="button"
             className="hud-control-button hud-control-button--red"
-            onClick={control.stop}
+            onClick={() => runControl('Stop OS', 'danger', control.stop)}
             disabled={control.pending}
           >
             <StopIcon />
@@ -300,7 +353,7 @@ export function HudRightPanel() {
           <button
             type="button"
             className="hud-control-button hud-control-button--amber"
-            onClick={control.restart}
+            onClick={() => runControl('Restart OS', 'warning', control.restart)}
             disabled={control.pending}
           >
             <RestartIcon />
@@ -309,7 +362,7 @@ export function HudRightPanel() {
           <button
             type="button"
             className="hud-control-button hud-control-button--blue"
-            onClick={control.watchdog}
+            onClick={() => runControl('Watchdog check', 'info', control.watchdog)}
             disabled={control.pending}
           >
             <ShieldIcon />
@@ -318,7 +371,7 @@ export function HudRightPanel() {
           <button
             type="button"
             className="hud-control-button hud-control-button--red hud-control-button--full"
-            onClick={control.kill}
+            onClick={() => runControl('Force kill', 'danger', control.kill)}
             disabled={control.pending}
           >
             <KillIcon />
@@ -326,56 +379,73 @@ export function HudRightPanel() {
           </button>
         </div>
         {control.lastResult && <span className="hud-right-panel__note">{control.lastResult}</span>}
-      </section>
-
-      <ModelRoutingCard />
-
-      <section className="hud-right-panel__card">
-        <header className="hud-right-panel__card-header">
-          <span>Service Controls</span>
-        </header>
-        <div className="hud-right-panel__service-list">
-          {servicesStatus ? (
-            <span className="hud-right-panel__note">{servicesStatus}</span>
-          ) : (
-            <>
-              {defaultServices.map(renderServiceRow)}
-              {showAllServices && otherServices.map(renderServiceRow)}
-            </>
+        <div className="hud-right-panel__subsection">
+          <header className="hud-right-panel__subsection-header">
+            <ServiceIcon />
+            <span>Service Controls</span>
+          </header>
+          <div className="hud-right-panel__service-list">
+            {primaryServiceSlots.map(({ id, label, service }) => (
+              service
+                ? renderServiceRow(service)
+                : <UnavailableServiceRow key={id} label={label} status={servicesStatus ?? 'Unavailable'} />
+            ))}
+            {showAllServices && otherServices.map(renderServiceRow)}
+          </div>
+          {!servicesStatus && otherServices.length > 0 && (
+            <button type="button" className="hud-right-panel__view-all" onClick={() => setShowAllServices((prev) => !prev)}>
+              <span>{showAllServices ? 'Hide services' : 'View all services'}</span>
+              <span style={{ '--chevron-rotate': showAllServices ? '90deg' : '0deg' } as CSSProperties} className="hud-right-panel__chevron">
+                <ChevronIcon />
+              </span>
+            </button>
           )}
         </div>
-        {!servicesStatus && otherServices.length > 0 && (
-          <button type="button" className="hud-right-panel__view-all" onClick={() => setShowAllServices((prev) => !prev)}>
-            <span>{showAllServices ? 'Hide services' : 'View all services'}</span>
-            <span style={{ '--chevron-rotate': showAllServices ? '90deg' : '0deg' } as CSSProperties} className="hud-right-panel__chevron">
-              <ChevronIcon />
-            </span>
-          </button>
-        )}
       </section>
 
-      <section className="hud-right-panel__card">
-        <header className="hud-right-panel__card-header">
-          <DriveIcon />
-          <span>Memory Health</span>
+      <section className="hud-right-panel__card hud-right-panel__memory-card">
+        <header className="hud-right-panel__card-header hud-memory__header">
+          <span className="hud-memory__title"><DriveIcon />Memory</span>
+          <span className={`hud-memory__headline hud-memory__headline--${qdrantState}`}>
+            {memoryStats ? `${memoryStats.total_memories.toLocaleString()} memories` : qdrantState}
+          </span>
         </header>
-        {memoryStatus ? (
-          <span className="hud-right-panel__note">{memoryStatus}</span>
-        ) : memory.data && hasMemoryStats(memory.data.tiers) ? (
-          <div className="hud-right-panel__service-list">
-            <div className="hud-right-panel__stat-row">
-              <span>Total memories</span>
-              <span>{memory.data.tiers.total_memories}</span>
-            </div>
-            <div className="hud-right-panel__stat-row">
+        <div className="hud-memory__main">
+          <div className="hud-memory__emblem"><MemoryStackIcon /></div>
+          <div className="hud-memory__metrics">
+            <div className="hud-memory__summary">
               <span>Estimated size</span>
-              <span>{formatBytes(memory.data.tiers.estimated_size_bytes)}</span>
+              <strong>{memoryStats ? formatBytes(memoryStats.estimated_size_bytes) : '—'}</strong>
+            </div>
+            <div className="hud-memory__tier-grid">
+              {tierMetrics.map((tierMetric) => (
+                <div key={tierMetric.label} className="hud-memory__tier">
+                  <span>{tierMetric.label}</span>
+                  <strong>{tierMetric.value.toLocaleString()}</strong>
+                  <span className="hud-memory__tier-track">
+                    <span style={{ '--memory-tier-fill': `${(tierMetric.value / maxTierCount) * 100}%` } as CSSProperties} />
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-        ) : (
-          <span className="hud-right-panel__note">No memory data</span>
-        )}
+          <div
+            className="hud-memory__ring"
+            style={{ '--memory-active-share': `${activeShare * 3.6}deg` } as CSSProperties}
+            aria-label={`Active tier share ${activeShare}%`}
+          >
+            <span><strong>{activeShare}%</strong>active</span>
+          </div>
+        </div>
+        <div className="hud-memory__status-grid">
+          <div><span>Qdrant</span><strong className={`is-${qdrantState}`}>{qdrantState}</strong></div>
+          <div><span>Memory module</span><strong className={`is-${memoryModuleState}`}>{memoryModuleState}</strong></div>
+          <div><span>Vector store</span><strong className={`is-${vectorStoreState}`}>{vectorStoreState}</strong></div>
+        </div>
+        {memoryNote && <div className="hud-memory__error"><span>Last state</span>{memoryNote}</div>}
       </section>
+
+      <RecentEvents events={events} />
     </div>
   )
 }

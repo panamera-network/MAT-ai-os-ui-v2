@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { CAPABILITIES, TIERS, type ModelProfiles } from '../domain/vision'
 import { useAgents } from '../hooks/useAgents'
 import { useLoops } from '../hooks/useLoops'
@@ -16,16 +17,6 @@ function countConfiguredSlots(profiles: ModelProfiles): number {
     }
   }
   return count
-}
-
-function GaugeIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
-      <path stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" d="M2.5 12.5a5.5 5.5 0 0 1 11 0" />
-      <path stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" d="M8 12.5 10.6 8" />
-      <circle cx="8" cy="12.5" r="0.9" fill="currentColor" />
-    </svg>
-  )
 }
 
 function AgentsIcon() {
@@ -94,9 +85,63 @@ function SkillsIcon() {
   )
 }
 
+interface ResourceStateSource {
+  data: unknown
+  error: { unreachable: boolean } | null
+  loading: boolean
+}
+
+function getResourceState(resource: ResourceStateSource): { label: string; tone: string } {
+  if (resource.data) return { label: 'ready', tone: 'ready' }
+  if (resource.loading) return { label: 'loading', tone: 'loading' }
+  if (resource.error) return { label: resource.error.unreachable ? 'offline' : 'error', tone: 'error' }
+  return { label: 'empty', tone: 'empty' }
+}
+
+interface InfoCardProps {
+  accent: 'cyan' | 'blue' | 'violet' | 'green' | 'amber' | 'ice'
+  icon: ReactNode
+  title: string
+  mainLabel: string
+  mainValue: string
+  metrics: { label: string; value: string }[]
+  state: { label: string; tone: string }
+}
+
+function InfoCard({ accent, icon, title, mainLabel, mainValue, metrics, state }: InfoCardProps) {
+  const hasData = state.tone === 'ready'
+
+  return (
+    <section className={`hud-left-panel__card hud-left-panel__card--${accent}`}>
+      <header className="hud-left-panel__card-header">
+        <span className="hud-left-panel__header-icon">{icon}</span>
+        <span>{title}</span>
+        <span className={`hud-left-panel__state is-${state.tone}`}>
+          <span className="hud-left-panel__state-dot" />
+          {state.label}
+        </span>
+      </header>
+      <div className="hud-left-panel__card-body">
+        <div className="hud-left-panel__metric-ring">
+          <strong>{hasData ? mainValue : '—'}</strong>
+          <span>{mainLabel}</span>
+        </div>
+        <dl className="hud-left-panel__metrics">
+          {metrics.map((metric) => (
+            <div key={metric.label}>
+              <dt>{metric.label}</dt>
+              <dd>{hasData ? metric.value : '—'}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  )
+}
+
 /**
- * Left info zone — compact real-data snapshots: Agents, Loops, LLM/model
- * routing, Governance, MCP, Skills. Every value is a direct count/derivation
+ * Left info zone — separate real-data cards for Agents, Loops, LLM/model
+ * routing, Governance, MCP, and Skills. Every value is a direct count/derivation
  * from a real VISION API response, formatted through `formatResourceValue`
  * so "still loading", "MAT unreachable", "request failed", and "loaded but
  * genuinely empty" each read distinctly instead of collapsing into one dash
@@ -114,64 +159,84 @@ export function HudLeftPanel() {
 
   return (
     <div className="hud-left-panel">
-      <section className="hud-left-panel__card">
-        <header className="hud-left-panel__card-header">
-          <GaugeIcon />
-          <span>Snapshot</span>
-        </header>
-        <div className="hud-left-panel__rows">
-          <div className="hud-left-panel__row">
-            <span className="hud-left-panel__row-icon">
-              <AgentsIcon />
-            </span>
-            <span className="hud-left-panel__label">Agents</span>
-            <span className="hud-left-panel__value">{formatResourceValue(agents, (d) => String(d.agents.length))}</span>
-          </div>
-          <div className="hud-left-panel__row">
-            <span className="hud-left-panel__row-icon">
-              <LoopsIcon />
-            </span>
-            <span className="hud-left-panel__label">Loops</span>
-            <span className="hud-left-panel__value">
-              {formatResourceValue(loops, (d) => `${d.loops.filter((loop) => loop.status === 'active').length} active / ${d.loops.length}`)}
-            </span>
-          </div>
-          <div className="hud-left-panel__row">
-            <span className="hud-left-panel__row-icon">
-              <LlmIcon />
-            </span>
-            <span className="hud-left-panel__label">LLM</span>
-            <span className="hud-left-panel__value">
-              {formatResourceValue(models, (d) => `${countConfiguredSlots(d.profiles)} configured`)}
-            </span>
-          </div>
-          <div className="hud-left-panel__row">
-            <span className="hud-left-panel__row-icon">
-              <GovernanceIcon />
-            </span>
-            <span className="hud-left-panel__label">Governance</span>
-            <span className="hud-left-panel__value">
-              {formatResourceValue(governance, (d) => `${d.laws.active_count} laws · ${d.lifecycle.total_cases} cases`)}
-            </span>
-          </div>
-          <div className="hud-left-panel__row">
-            <span className="hud-left-panel__row-icon">
-              <McpIcon />
-            </span>
-            <span className="hud-left-panel__label">MCP</span>
-            <span className="hud-left-panel__value">
-              {formatResourceValue(mcp, (d) => `${d.servers.length} servers · ${d.pending_approvals.length} pending`)}
-            </span>
-          </div>
-          <div className="hud-left-panel__row">
-            <span className="hud-left-panel__row-icon">
-              <SkillsIcon />
-            </span>
-            <span className="hud-left-panel__label">Skills</span>
-            <span className="hud-left-panel__value">{formatResourceValue(skills, (d) => String(d.skills.length))}</span>
-          </div>
-        </div>
-      </section>
+      <InfoCard
+        accent="cyan"
+        icon={<AgentsIcon />}
+        title="Agents"
+        mainLabel="total"
+        mainValue={formatResourceValue(agents, (d) => String(d.agents.length))}
+        metrics={[
+          { label: 'Global', value: formatResourceValue(agents, (d) => String(d.agents.filter((agent) => agent.is_global).length)) },
+          { label: 'Domains', value: formatResourceValue(agents, (d) => String(new Set(d.agents.map((agent) => agent.domain)).size)) },
+          { label: 'Skill links', value: formatResourceValue(agents, (d) => String(d.agents.reduce((sum, agent) => sum + agent.skill_ids.length, 0))) },
+        ]}
+        state={getResourceState(agents)}
+      />
+      <InfoCard
+        accent="blue"
+        icon={<LoopsIcon />}
+        title="Loops"
+        mainLabel="active"
+        mainValue={formatResourceValue(loops, (d) => String(d.loops.filter((loop) => loop.status === 'active').length))}
+        metrics={[
+          { label: 'Total', value: formatResourceValue(loops, (d) => String(d.loops.length)) },
+          { label: 'Paused', value: formatResourceValue(loops, (d) => String(d.loops.filter((loop) => loop.status === 'paused').length)) },
+          { label: 'Runs', value: formatResourceValue(loops, (d) => String(d.loops.reduce((sum, loop) => sum + loop.run_count, 0))) },
+        ]}
+        state={getResourceState(loops)}
+      />
+      <InfoCard
+        accent="violet"
+        icon={<LlmIcon />}
+        title="LLM"
+        mainLabel="slots"
+        mainValue={formatResourceValue(models, (d) => String(countConfiguredSlots(d.profiles)))}
+        metrics={[
+          { label: 'Capabilities', value: formatResourceValue(models, (d) => String(CAPABILITIES.filter((capability) => TIERS.some((tier) => Boolean(d.profiles[capability]?.[tier]))).length)) },
+          { label: 'Primary', value: formatResourceValue(models, (d) => String(CAPABILITIES.filter((capability) => Boolean(d.profiles[capability]?.primary)).length)) },
+          { label: 'Fallbacks', value: formatResourceValue(models, (d) => String(CAPABILITIES.reduce((sum, capability) => sum + TIERS.slice(1).filter((tier) => Boolean(d.profiles[capability]?.[tier])).length, 0))) },
+        ]}
+        state={getResourceState(models)}
+      />
+      <InfoCard
+        accent="green"
+        icon={<GovernanceIcon />}
+        title="Governance"
+        mainLabel="active"
+        mainValue={formatResourceValue(governance, (d) => String(d.laws.active_count))}
+        metrics={[
+          { label: 'Total laws', value: formatResourceValue(governance, (d) => String(d.laws.total)) },
+          { label: 'Inactive', value: formatResourceValue(governance, (d) => String(d.laws.inactive_count)) },
+          { label: 'Cases', value: formatResourceValue(governance, (d) => String(d.lifecycle.total_cases)) },
+        ]}
+        state={getResourceState(governance)}
+      />
+      <InfoCard
+        accent="amber"
+        icon={<McpIcon />}
+        title="MCP"
+        mainLabel="servers"
+        mainValue={formatResourceValue(mcp, (d) => String(d.servers.length))}
+        metrics={[
+          { label: 'Pending', value: formatResourceValue(mcp, (d) => String(d.pending_approvals.length)) },
+          { label: 'Agents', value: formatResourceValue(mcp, (d) => String(new Set(d.pending_approvals.map((approval) => approval.agent_id)).size)) },
+          { label: 'Skill grants', value: formatResourceValue(mcp, (d) => String(d.pending_approvals.reduce((sum, approval) => sum + approval.granting_skills.length, 0))) },
+        ]}
+        state={getResourceState(mcp)}
+      />
+      <InfoCard
+        accent="ice"
+        icon={<SkillsIcon />}
+        title="Skills"
+        mainLabel="total"
+        mainValue={formatResourceValue(skills, (d) => String(d.skills.length))}
+        metrics={[
+          { label: 'Global', value: formatResourceValue(skills, (d) => String(d.skills.filter((skill) => skill.is_global).length)) },
+          { label: 'Personal', value: formatResourceValue(skills, (d) => String(d.skills.filter((skill) => Boolean(skill.owner_user_id)).length)) },
+          { label: 'MCP linked', value: formatResourceValue(skills, (d) => String(d.skills.filter((skill) => (skill.mcp_servers?.length ?? 0) > 0).length)) },
+        ]}
+        state={getResourceState(skills)}
+      />
     </div>
   )
 }
