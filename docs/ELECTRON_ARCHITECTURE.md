@@ -189,6 +189,20 @@ started it — matches V1's own precedent of leaving backend processes running
 independent of the UI window's lifecycle. There is no shutdown-on-quit path to
 disable; none was ever added.
 
+There *was*, however, a real Windows-specific way this broke without any such
+path existing: Windows assigns Electron's process to a Job Object with
+kill-on-close semantics, which by default kills every process assigned to that
+job — including any plain child process this app spawns — the instant
+Electron's own process ends, `app.quit()` or a forceful `taskkill` alike.
+Confirmed live: killing `electron.exe` alone took a still-healthy MAT process
+down with it. `spawn()`'s `detached: true` (`supervisor.ts`) is the fix —
+Windows' `CREATE_NEW_PROCESS_GROUP`, which keeps the spawned `python -m ops`
+out of that job object — paired with `child.unref()` so this app's own event
+loop isn't held open by the reference either. Verified: MAT now survives
+`taskkill /F /IM electron.exe`, and a freshly reopened instance correctly
+*attaches* to it (`status -> attaching -> ready: Attached to an
+already-running MAT`) rather than spawning a second one.
+
 **Singleton enforcement lives on the MAT-AI-OS-V2 side, not here.**
 `probePort` narrows the race but can't close it (classic TOCTOU: two launchers can
 both see "nothing listening" a moment apart). The actual guarantee is

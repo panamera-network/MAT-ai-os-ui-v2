@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
-import { hasMemoryStats } from '../domain/vision'
+import { hasMemoryStats, isServiceOn } from '../domain/vision'
 import type { ServiceStatus } from '../domain/vision'
 import { useServices } from '../hooks/useServices'
 import { useMemoryStats } from '../hooks/useMemoryStats'
@@ -146,13 +146,8 @@ function formatEventTime(timestamp: number): string {
   }).format(new Date(timestamp))
 }
 
-/** Toggle "on" position for `running`/`degraded` (the service is up, even
- * if unhealthy) — only `stopped` reads as fully off. `unconfigured`/
- * `unknown_service` can't be toggled at all: there's nothing real to start. */
-function isServiceOn(state: ServiceStatus['state']): boolean {
-  return state === 'running' || state === 'degraded'
-}
-
+/** `unconfigured`/`unknown_service` can't be toggled at all: there's nothing
+ * real to start. */
 function isServiceToggleable(state: ServiceStatus['state']): boolean {
   return state === 'running' || state === 'degraded' || state === 'stopped'
 }

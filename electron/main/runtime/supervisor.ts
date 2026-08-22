@@ -124,7 +124,18 @@ export class RuntimeSupervisor extends EventEmitter {
         },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
+        // `detached: true` -> CREATE_NEW_PROCESS_GROUP on Windows, keeping
+        // this process out of Electron's own job object. Without it, MAT
+        // gets force-killed the instant Electron's process is (Windows
+        // Job Objects propagate termination to every process assigned to
+        // them by default — confirmed live: killing electron.exe alone
+        // took the still-healthy MAT process down with it, directly
+        // contradicting "closing the UI does not stop MAT"). `unref()`
+        // just stops this app's own event loop from being held open by the
+        // child reference — it doesn't touch the piped stdio below.
+        detached: true,
       })
+      child.unref()
       this.child = child
       child.stdout?.on('data', (chunk: Buffer) => logRuntimeLine(`[ops:stdout] ${chunk.toString().trimEnd()}`))
       child.stderr?.on('data', (chunk: Buffer) => {
@@ -138,9 +149,29 @@ export class RuntimeSupervisor extends EventEmitter {
       child.once('exit', (code, signal) => {
         this.childExited = true
         logRuntimeLine(`ops process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`)
-        if (this.status.state === 'starting' || this.status.state === 'ready') {
-          const detail = this.lastStderrLine ? `: ${this.lastStderrLine}` : ''
-          this.setStatus('error', true, null, `MAT exited unexpectedly (code ${code ?? signal ?? 'unknown'})${detail}`)
+        const detail = this.lastStderrLine ? `: ${this.lastStderrLine}` : ''
+        if (this.status.state === 'starting') {
+          // A crash before ever becoming healthy — `waitForHealth()` below
+          // is also watching `childExited` and would report a generic
+          // "never became healthy in time" otherwise; set the real reason
+          // immediately. No auto-restart attempt here: retrying an
+          // immediate spawn-time failure without a diagnosed cause (a
+          // missing venv, a lock rejection, ...) could just spin uselessly.
+          this.setStatus('error', false, null, `MAT exited unexpectedly (code ${code ?? signal ?? 'unknown'})${detail}`)
+          return
+        }
+        // A crash of a process that WAS `ready` gets a real recovery
+        // attempt — see `handleUnexpectedExit`. This used to be handled by
+        // immediately setting an `'error'` status right here, which — since
+        // `watchdogTick()` only ever acts while `state === 'ready'` —
+        // silently locked the watchdog's own auto-restart branch out before
+        // it could ever run for the exact case it exists for. Reacting to
+        // the `exit` event directly (rather than waiting for the next
+        // health-poll cycle to notice) is also strictly faster: Node knows
+        // the instant the process dies, no need to wait out a health-check
+        // timeout to infer it.
+        if (this.status.state === 'ready') {
+          void this.handleUnexpectedExit(code, signal, detail)
         }
       })
       child.once('error', (err) => {
@@ -151,7 +182,13 @@ export class RuntimeSupervisor extends EventEmitter {
 
       const becameReady = await this.waitForHealth(START_TIMEOUT_MS)
       if (!becameReady) {
-        this.setStatus('unreachable', true, child.pid ?? null, 'MAT started but never became healthy in time.')
+        // Only overwrite with this generic message if the child is still
+        // alive but simply never answered in time — if it exited, the
+        // `exit` handler above already set a more specific, real reason;
+        // don't stomp that back to something vaguer.
+        if (!this.childExited) {
+          this.setStatus('unreachable', true, child.pid ?? null, 'MAT started but never became healthy in time.')
+        }
         return this.status
       }
 
@@ -212,6 +249,36 @@ export class RuntimeSupervisor extends EventEmitter {
     this.stopWatchdog()
   }
 
+  /** The one place that decides whether to auto-restart after a crash —
+   * called directly from the `exit` event (fast path) so recovery starts
+   * the instant Node reports the process gone, not on the next watchdog
+   * tick. Bounded by `MAX_AUTO_RESTARTS` so a process that crashes
+   * immediately every time doesn't spin forever. */
+  private async handleUnexpectedExit(code: number | null, signal: NodeJS.Signals | null, detail: string): Promise<void> {
+    this.stopWatchdog()
+    const reason = `MAT exited unexpectedly (code ${code ?? signal ?? 'unknown'})${detail}`
+    if (this.status.owned && this.autoRestartCount < MAX_AUTO_RESTARTS) {
+      this.autoRestartCount += 1
+      logRuntimeLine(`crash recovery: auto-restart attempt ${this.autoRestartCount}/${MAX_AUTO_RESTARTS} — ${reason}`)
+      // `this.status.state` is still the stale `'ready'` from before the
+      // crash at this point — `start()` treats `'ready'` as "already
+      // healthy, nothing to do" and no-ops immediately, which silently
+      // swallowed every recovery attempt until this line existed. Move it
+      // off `'ready'` first so `start()` actually runs.
+      this.setStatus('starting', true, null, `Recovering from crash (attempt ${this.autoRestartCount}/${MAX_AUTO_RESTARTS})…`)
+      await this.start()
+      return
+    }
+    this.setStatus(
+      'error',
+      this.status.owned,
+      null,
+      this.status.owned
+        ? `${reason} — auto-restart stopped after ${MAX_AUTO_RESTARTS} attempts. Use Restart to try again.`
+        : reason,
+    )
+  }
+
   private async waitForHealth(timeoutMs: number): Promise<boolean> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
@@ -235,6 +302,14 @@ export class RuntimeSupervisor extends EventEmitter {
     }
   }
 
+  /** Only ever handles "still alive, just not answering `/health`" —
+   * process death is handled immediately by the `exit` listener in
+   * `start()` (see `handleUnexpectedExit`), which fires the instant Node
+   * reports the child gone rather than waiting for this to notice
+   * indirectly. Deliberately no auto-restart here: a live-but-unresponsive
+   * process (ours or attached) might still recover, or might not be safe to
+   * touch — this just reports `unreachable` and leaves the decision to the
+   * user (Restart). */
   private async watchdogTick(): Promise<void> {
     if (this.status.state !== 'ready' || this.busy) return
     const healthy = await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)
@@ -246,24 +321,7 @@ export class RuntimeSupervisor extends EventEmitter {
     if (this.consecutiveFailures < WATCHDOG_FAILURE_THRESHOLD) return
 
     this.stopWatchdog()
-    // Recovery is conservative on purpose: only auto-respawn a process we
-    // own AND have confirmed actually exited. A live-but-slow process (ours
-    // or attached) just reports `unreachable` — no automatic kill-and-retry
-    // on a process that might still recover or might not be safe to touch.
-    if (this.status.owned && this.childExited && this.autoRestartCount < MAX_AUTO_RESTARTS) {
-      this.autoRestartCount += 1
-      logRuntimeLine(`watchdog: auto-restart attempt ${this.autoRestartCount}/${MAX_AUTO_RESTARTS}`)
-      await this.start()
-      return
-    }
-    this.setStatus(
-      'unreachable',
-      this.status.owned,
-      this.status.pid,
-      this.status.owned && this.autoRestartCount >= MAX_AUTO_RESTARTS
-        ? 'MAT crashed repeatedly — auto-restart stopped. Use Restart to try again.'
-        : 'Lost contact with MAT.',
-    )
+    this.setStatus('unreachable', this.status.owned, this.status.pid, 'Lost contact with MAT.')
   }
 
   private makeStatus(state: RuntimeState, owned: boolean, pid: number | null, message: string): RuntimeStatus {

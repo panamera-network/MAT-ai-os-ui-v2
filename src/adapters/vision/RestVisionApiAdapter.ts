@@ -66,6 +66,12 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
     return caller ?? AbortSignal.timeout(this.config.timeoutMs)
   }
 
+  /** Same "caller override wins" rule as `signal()`, but defaulting to the
+   * longer reasoning budget — for `think`/`see`/`listen`/`speak` only. */
+  private reasoningSignal(caller?: AbortSignal): AbortSignal {
+    return caller ?? AbortSignal.timeout(this.config.reasoningTimeoutMs)
+  }
+
   private async errorFor(response: Response): Promise<VisionApiError> {
     let detail = response.statusText || `Request failed: ${response.status}`
     let body: unknown
@@ -114,7 +120,7 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
   }
 
   think(request: ThinkRequest, signal?: AbortSignal): Promise<ThinkResult> {
-    return this.requestJson<ThinkResult>('/think', { ...this.jsonInit(request), signal })
+    return this.requestJson<ThinkResult>('/think', { ...this.jsonInit(request), signal: this.reasoningSignal(signal) })
   }
 
   see(request: SeeRequest, signal?: AbortSignal): Promise<SeeResult> {
@@ -124,21 +130,21 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
     // No Content-Type set here on purpose — fetch derives the correct
     // `multipart/form-data; boundary=...` from the FormData body itself;
     // setting it manually would break the boundary.
-    return this.requestJson<SeeResult>('/see', { method: 'POST', body: form, signal })
+    return this.requestJson<SeeResult>('/see', { method: 'POST', body: form, signal: this.reasoningSignal(signal) })
   }
 
   listen(request: ListenRequest, signal?: AbortSignal): Promise<ListenResult> {
     const form = new FormData()
     form.set('audio', request.audio, request.filename ?? 'audio.webm')
     if (request.session_id) form.set('session_id', request.session_id)
-    return this.requestJson<ListenResult>('/listen', { method: 'POST', body: form, signal })
+    return this.requestJson<ListenResult>('/listen', { method: 'POST', body: form, signal: this.reasoningSignal(signal) })
   }
 
   async speak(request: SpeakRequest, signal?: AbortSignal): Promise<SpeakResult> {
     const url = `${this.config.baseUrl}/speak`
     let response: Response
     try {
-      response = await fetch(url, { ...this.jsonInit(request), headers: this.headers({ 'Content-Type': 'application/json' }), signal: this.signal(signal) })
+      response = await fetch(url, { ...this.jsonInit(request), headers: this.headers({ 'Content-Type': 'application/json' }), signal: this.reasoningSignal(signal) })
     } catch (cause) {
       throw new VisionApiError(`Could not reach MAT at ${url} — is the backend running?`, {
         status: 0,

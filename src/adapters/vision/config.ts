@@ -15,10 +15,17 @@ export interface VisionApiConfig {
   /** Default per-request timeout; a caller-supplied `AbortSignal` overrides
    * this rather than combining with it, keeping the cancellation story simple. */
   timeoutMs: number
+  /** Separate, longer default for MAT's own reasoning/generation calls
+   * (`think`/`see`/`listen`/`speak`) — these wait on a real LLM completion,
+   * which routinely takes longer than `timeoutMs`. Found during real
+   * end-to-end verification: a plain one-word `/think` request genuinely
+   * exceeded the general 5s default and got aborted mid-flight. */
+  reasoningTimeoutMs: number
 }
 
 export const DEFAULT_VISION_API_CONFIG: VisionApiConfig = {
   baseUrl: (import.meta.env.VITE_MAT_API_BASE_URL as string | undefined) ?? 'http://127.0.0.1:8000',
   apiKey: (import.meta.env.VITE_MAT_API_KEY as string | undefined) ?? '',
   timeoutMs: 5000,
+  reasoningTimeoutMs: 60000,
 }

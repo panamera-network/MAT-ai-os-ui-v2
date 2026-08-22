@@ -39,3 +39,16 @@ export interface ServiceRestartResult {
 export interface ServiceActionResult<T> {
   result: T
 }
+
+/** Whether a service reads as "on" — `running` or `degraded` both mean the
+ * process is up (even if unhealthy); only `stopped`/`unconfigured`/
+ * `unknown_service` read as off. The single source of truth for this: it
+ * used to be defined separately in the button-label logic and in
+ * `useServiceControl`'s start-vs-stop decision, and those two copies had
+ * drifted apart — a service showing "degraded" displayed a Stop button
+ * (label logic said `degraded` counts as on) that actually called
+ * `startService` (the toggle logic only checked for `running`), so clicking
+ * Stop on a degraded service silently restarted it instead. */
+export function isServiceOn(state: ServiceStatus['state']): boolean {
+  return state === 'running' || state === 'degraded'
+}

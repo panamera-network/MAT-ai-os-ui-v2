@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useVisionApi } from '../app/VisionApiProvider'
-import type { ServiceStatus } from '../domain/vision'
+import { isServiceOn, type ServiceStatus } from '../domain/vision'
 
 interface UseServiceControlResult {
   /** The service id currently mid-request, if any — disable that one row's
@@ -35,7 +35,7 @@ export function useServiceControl(): UseServiceControlResult {
   }
 
   const toggle = (service: ServiceStatus, onSettled: () => void) => {
-    run(service.id, service.state === 'running' ? api.stopService(service.id) : api.startService(service.id), onSettled)
+    run(service.id, isServiceOn(service.state) ? api.stopService(service.id) : api.startService(service.id), onSettled)
   }
 
   const restart = (service: ServiceStatus, onSettled: () => void) => {
