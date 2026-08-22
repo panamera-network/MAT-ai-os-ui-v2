@@ -15,10 +15,20 @@ import { session } from 'electron'
  * and its HMR client holds a WebSocket open to the same origin. Production
  * gets none of that — script-src is `'self'` only, matching a plain `file://`
  * load of the built `dist/index.html`.
+ *
+ * `visionBaseUrl` is the same origin `adapters/vision/config.ts`'s
+ * `DEFAULT_VISION_API_CONFIG.baseUrl` resolves to (see
+ * `electron/main/runtime/config.ts`, the one place both sides read it from)
+ * — without it in `connect-src`, every `fetch()` the renderer's VISION
+ * adapter makes is silently blocked by this exact policy. That was true
+ * before this file added a `runtime/` supervisor too: the adapter layer
+ * existed and called `fetch()` directly (see docs/ELECTRON_ARCHITECTURE.md's
+ * "VISION API vs. Electron" table), this allowance was simply missing.
  */
-export function applyContentSecurityPolicy(devServerUrl: string | undefined): void {
+export function applyContentSecurityPolicy(devServerUrl: string | undefined, visionBaseUrl: string): void {
   const devOrigin = devServerUrl ? new URL(devServerUrl).origin : null
   const devWsOrigin = devOrigin ? devOrigin.replace(/^http/, 'ws') : null
+  const visionOrigin = new URL(visionBaseUrl).origin
 
   const policy = [
     "default-src 'self'",
@@ -36,7 +46,7 @@ export function applyContentSecurityPolicy(devServerUrl: string | undefined): vo
     // than maintaining two separate policies for one low-value difference.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    ['connect-src', "'self'", devOrigin, devWsOrigin].filter(Boolean).join(' '),
+    ['connect-src', "'self'", devOrigin, devWsOrigin, visionOrigin].filter(Boolean).join(' '),
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

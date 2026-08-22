@@ -76,8 +76,8 @@ Three rules make this an actual boundary and not just a naming convention:
    An unlisted channel simply has no handler — `ipcRenderer.invoke` on it rejects.
    There is no dynamic/wildcard handler registration anywhere in `electron/`.
 
-The current allowlist has exactly one entry: `mat:ping`. That is the whole surface
-today.
+The allowlist today: `mat:ping`, and five `mat:runtime:*` channels for the
+MAT-AI-OS-V2 process supervisor — see "Runtime supervision" below.
 
 ## Where future PC-control capability belongs
 
@@ -118,17 +118,91 @@ halves of what this app needs:
 
 | | VISION API (HTTP) | Electron (IPC) |
 |---|---|---|
-| Owns | MAT's own state: agents, loops, memory, skills, models, governance, soul/identity, MAT process lifecycle | This app's OS-level access: windowing, and (later) local file/process/input capability |
-| Reached via | `fetch()` against `http://127.0.0.1:8000`, from `adapters/` (not built yet) | `window.mat.*`, from the preload bridge |
-| Runs | A separate process (`ops/startup.py`), possibly on another machine | In-process with this app, as its own main process |
+| Owns | MAT's own state: agents, loops, memory, skills, models, governance, soul/identity, MAT process lifecycle (once running) | This app's OS-level access: windowing, and starting/stopping the MAT-AI-OS-V2 *process itself* |
+| Reached via | `fetch()` against `http://127.0.0.1:8000`, from `adapters/` (built — see `src/adapters/vision/`) | `window.mat.*`, from the preload bridge |
+| Runs | A separate process (`python -m ops`, spawned by `electron/main/runtime/` — see below), possibly on another machine | In-process with this app, as its own main process |
 | Security model | Optional `X-API-Key` header, CORS wide open by design (see the contract doc) | contextIsolation + explicit per-capability IPC allowlist |
 
-Concretely: "is MAT running" is a VISION API question (`GET /control/status`). "Is
-*this app's window* focused, or can it read a local file" is an Electron question.
-The renderer's `adapters/` layer (not implemented yet) will call the VISION API
-directly over HTTP exactly as a browser tab could — Electron does not proxy or
-wrap that traffic. Electron's only job is the OS-level capability HTTP can't
-provide.
+Concretely: "is MAT's Body attached and running" is a VISION API question
+(`GET /control/status`, already wired — see `useHealth`/`useBodyControl`). "Is the
+`python -m ops` *process* running at all, and who's going to start it" is an
+Electron question — that's `runtime/` below. The renderer's `adapters/` layer
+calls the VISION API directly over HTTP exactly as a browser tab could — Electron
+does not proxy or wrap that traffic; it only ever gets MAT's process running in
+the first place.
+
+## Runtime supervision (`electron/main/runtime/`)
+
+Electron main's answer to "opening the UI should bring MAT online automatically,"
+without embedding any of that logic in React (`src/` never spawns a process, reads
+a path, or knows what `python -m ops` is — it only ever sees a `RuntimeStatus`).
+
+```
+electron/main/runtime/
+├── config.ts       — resolves MAT-AI-OS-V2's repo path (env -> bundled -> dev
+│                     sibling), venv python, host/port
+├── portProbe.ts     — "is anything already listening" (TCP connect) + port-owner kill
+├── healthCheck.ts    — GET /health, the one real "is VISION actually serving" signal
+├── log.ts             — python -m ops's stdout/stderr -> userData/logs/mat-ops.log
+└── supervisor.ts       — RuntimeSupervisor: owns the child process, the watchdog,
+                          and every state transition
+```
+
+**Runtime path resolution** (`config.ts`), first candidate that actually exists wins:
+1. `MAT_RUNTIME_PATH` env var — explicit, always wins even if what it points to
+   turns out invalid (the resulting error names exactly what was configured).
+2. `<process.resourcesPath>/MAT-AI-OS-V2` — a packaged build's bundled runtime,
+   once electron-builder's `extraResources` is set up to actually place one there
+   (this is the *resolution order* a packaged app needs; populating that location
+   is separate packaging work, out of scope here — MAT-AI-OS-V2 stays standalone).
+3. `../MAT-AI-OS-V2` sibling checkout — dev-only fallback, same convention as the
+   linked presence-orb/brain-view packages.
+Resolving to nothing (packaged, no env var, no bundled runtime found) leaves
+`repoPath`/`pythonPath` as `null` — `start()` reports a clear `error` state
+("MAT-AI-OS-V2 runtime not found ... set MAT_RUNTIME_PATH") rather than crashing
+or guessing a path. *Attaching* to an already-running instance still works in this
+state, since that path only needs `host`/`port`/`baseUrl`, never a resolved repo.
+
+`main/index.ts` constructs one `RuntimeSupervisor`, calls `initialize()` once at
+startup, and forwards every `'status'` event it emits to the renderer over
+`mat:runtime:statusChanged`. Five IPC channels, all in `contract.ts`:
+`runtimeGetStatus`/`Start`/`Stop`/`Restart` (invoke/handle) and
+`runtimeStatusChanged` (push-only, `webContents.send` — not `invoke`d, since it's
+main telling the renderer something changed, not the renderer asking a question).
+`src/hooks/useRuntime.ts` is the one renderer-side consumer.
+
+**Startup flow**: probe the configured host:port. Something already listening ->
+confirm it's healthy and *attach* (`owned: false` — this app never spawns a second
+instance or touches a process it didn't start). Nothing listening -> spawn
+`<repoPath>/.venv/Scripts/python.exe -m ops` (`owned: true`), poll `/health` until
+it answers or a timeout elapses.
+
+**Ownership rule**: `owned` is only ever true once this app has confirmed *it*
+spawned the current process. It governs how `stop()` works (a real child-process
+handle + graceful `POST /control/stop` first, vs. a port-owner-PID lookup for an
+attached process) and how the watchdog decides whether to auto-restart (only ever
+a process this app owns *and* has confirmed actually exited — never a live-but-
+slow process, ours or attached, gets killed automatically).
+
+**Quit behavior**: closing this app's window never stops MAT, regardless of who
+started it — matches V1's own precedent of leaving backend processes running
+independent of the UI window's lifecycle. There is no shutdown-on-quit path to
+disable; none was ever added.
+
+**Singleton enforcement lives on the MAT-AI-OS-V2 side, not here.**
+`probePort` narrows the race but can't close it (classic TOCTOU: two launchers can
+both see "nothing listening" a moment apart). The actual guarantee is
+`ops/lock.py` (MAT-AI-OS-V2 repo): `python -m ops` acquires a real OS-level
+advisory file lock (`msvcrt.locking`/`fcntl.flock`) on `data/ops-<port>.lock`
+*before* doing any expensive construction — a second `python -m ops` on the same
+port fails fast (`SystemExit(1)`, clear log line) instead of either double-serving
+or wastefully finishing ~15s of startup work first. The kernel releases the lock
+automatically when the holding process's file handle closes for any reason,
+including a crash or a forceful kill — there is no stale-lock state to detect or
+clean up; a fresh process trying the same port right after simply acquires it.
+This app's supervisor surfaces that failure like any other exit (see
+`RuntimeSupervisor`'s `lastStderrLine`-annotated exit handling) rather than
+reimplementing the lock itself.
 
 ## Development and production flow
 

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { ConnectionState } from '../hooks/useHealth'
 import type { Health } from '../domain/vision'
+import { useRuntime } from '../hooks/useRuntime'
 import './HudStatus.css'
 
 interface HudStatusProps {
@@ -35,9 +36,12 @@ function StatusField({ chart = false, className = '', label, value }: StatusFiel
 
 /** Compact header telemetry. MAT Core and Active Model use the real health
  * response. CPU/RAM/GPU/Network are deliberately empty chart-ready slots
- * until a genuine PC-health source exists. */
+ * until a genuine PC-health source exists. Operator/Status is the Electron
+ * runtime supervisor's own status (see useRuntime) — '—' outside the
+ * Electron shell, where there's no process to supervise. */
 export function HudStatus({ connection, health }: HudStatusProps) {
   const ready = connection === 'online' ? health : null
+  const runtime = useRuntime()
 
   return (
     <div className="hud-status">
@@ -55,7 +59,7 @@ export function HudStatus({ connection, health }: HudStatusProps) {
         label="Active Model"
         value={ready ? `${ready.active_model.provider} · ${ready.active_model.model}` : '—'}
       />
-      <StatusField label="Operator / Status" value="—" />
+      <StatusField label="Operator / Status" value={runtime.status?.message ?? '—'} />
     </div>
   )
 }

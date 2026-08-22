@@ -3,6 +3,6 @@
      package's canvas is genuinely transparent now (alpha-enabled, cleared
      to alpha 0), so there's no opaque square to keep contained anymore;
      this box is purely a sizing/centering box, not a visible boundary. */
-  width: 480px;
-  height: 480px;
+  width: min(620px, 82vmin);
+  height: min(620px, 82vmin);
 }
