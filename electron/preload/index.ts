@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type MatBridgeApi, type PingResponse, type RuntimeStatus } from '../ipc/contract'
+import { IPC_CHANNELS, type MatBridgeApi, type PingResponse, type RuntimeStatus, type TelemetrySnapshot } from '../ipc/contract'
 
 /**
  * The ONLY place `ipcRenderer` is ever touched. `contextIsolation: true` +
@@ -20,6 +20,14 @@ const matBridge: MatBridgeApi = {
       const wrapped = (_event: Electron.IpcRendererEvent, status: RuntimeStatus) => listener(status)
       ipcRenderer.on(IPC_CHANNELS.runtimeStatusChanged, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.runtimeStatusChanged, wrapped)
+    },
+  },
+  telemetry: {
+    getSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.telemetryGetSnapshot) as Promise<TelemetrySnapshot | null>,
+    onSnapshotChanged: (listener: (snapshot: TelemetrySnapshot) => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, snapshot: TelemetrySnapshot) => listener(snapshot)
+      ipcRenderer.on(IPC_CHANNELS.telemetrySnapshotChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.telemetrySnapshotChanged, wrapped)
     },
   },
 }

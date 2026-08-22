@@ -218,6 +218,53 @@ This app's supervisor surfaces that failure like any other exit (see
 `RuntimeSupervisor`'s `lastStderrLine`-annotated exit handling) rather than
 reimplementing the lock itself.
 
+## PC telemetry (`electron/main/telemetry/`)
+
+The HUD header's CPU/RAM/GPU/Network slots read real host-machine numbers —
+deliberately unrelated to `runtime/`: this is about the PC Electron is running on,
+not about MAT or VISION, and it works identically whether MAT is up, down, or
+never configured at all.
+
+```
+electron/main/telemetry/
+├── service.ts — TelemetryService: polls the host every 1.5s, emits 'snapshot'
+└── index.ts   — barrel
+```
+
+**Source**: the `systeminformation` package (zero dependencies) — `si.
+currentLoad()` for CPU%, `si.mem()` for RAM used/total, `si.graphics()` for GPU
+utilization/VRAM, `si.networkStats()` for live rx/tx bytes-per-second.
+`node:os` alone can't cover this: it has no GPU introspection at all, and its
+network counters are cumulative totals since interface-up, not a rate — the
+main reason this task pulled in a small dependency instead of staying
+dependency-free like `runtime/`'s own modules.
+
+**GPU is honestly degraded, not faked.** `si.graphics()` depends entirely on
+what the host's controller/driver actually reports back through Windows'
+management interfaces, which varies by GPU vendor and driver version. When
+`utilizationGpu`/VRAM fields come back undefined, `TelemetryService` reports
+`usagePercent: null` (and `vramUsedBytes`/`vramTotalBytes: null`) rather than a
+fabricated number — the renderer shows `Unavailable` in that case (see
+`HudStatus.tsx`), never a zero or stale value dressed up as live.
+
+**IPC**: one request/response channel (`telemetryGetSnapshot`, for the
+renderer's first paint before any push has arrived) and one push channel
+(`telemetrySnapshotChanged`, `webContents.send` on every poll tick) — the same
+invoke/push split as `runtime/`, both allowlisted in `contract.ts`'s
+`TelemetrySnapshot` type. Read-only: there is no handler that can change
+anything about the host, matching `docs`'s existing no-generic-IPC rule.
+`src/hooks/useTelemetry.ts` is the one renderer-side consumer, mirroring
+`useRuntime.ts`'s subscribe/unsubscribe shape but with no actions of its own.
+
+**Lifecycle**: `main/index.ts` constructs one `TelemetryService`, starts its
+poll loop once the main window exists, and stops it in `window-all-closed` —
+before the quit check, so the interval is always cleared even on platforms
+where the app itself stays alive (macOS). A macOS `activate` reopen restarts
+polling along with the window. Unlike `runtime`, closing the window has no
+special-case reasoning to preserve here: there's no host process to keep alive
+independent of anything, so stopping the poll loop on close is simply correct,
+not a deliberate exception.
+
 ## Development and production flow
 
 Both flows go through `vite-plugin-electron/simple`, configured in `vite.config.ts`,

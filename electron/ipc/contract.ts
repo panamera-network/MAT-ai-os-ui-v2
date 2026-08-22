@@ -20,6 +20,9 @@ export const IPC_CHANNELS = {
   runtimeRestart: 'mat:runtime:restart',
   /** Push-only: main -> renderer via `webContents.send`, never `invoke`d. */
   runtimeStatusChanged: 'mat:runtime:statusChanged',
+  telemetryGetSnapshot: 'mat:telemetry:getSnapshot',
+  /** Push-only, same rule as `runtimeStatusChanged`. */
+  telemetrySnapshotChanged: 'mat:telemetry:snapshotChanged',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -55,6 +58,27 @@ export interface RuntimeStatus {
   since: number
 }
 
+/**
+ * One reading of the host machine's own resource usage — CPU/RAM/GPU/
+ * network, for the HUD header's chart slots. Distinct from `RuntimeStatus`:
+ * this is about the PC this app runs on, never about MAT or Body (task:
+ * "UI/Electron side only. Do not put this in MAT core or Body").
+ *
+ * `gpu`'s fields are independently nullable — a GPU (or its driver) that
+ * doesn't expose one of these to the OS reports `null` for exactly that
+ * field, never a fabricated number. `null` across all three means "no GPU
+ * telemetry available on this machine", not "0% usage" (a real reading).
+ */
+export interface TelemetrySnapshot {
+  cpu: { usagePercent: number }
+  ram: { usedBytes: number; totalBytes: number; usagePercent: number }
+  gpu: { usagePercent: number | null; vramUsedBytes: number | null; vramTotalBytes: number | null }
+  /** Live throughput (bytes/sec), not cumulative totals since boot. */
+  network: { rxBytesPerSec: number; txBytesPerSec: number }
+  /** `Date.now()` when this reading was taken. */
+  timestamp: number
+}
+
 /** The exact shape `contextBridge.exposeInMainWorld` puts on `window.mat`. */
 export interface MatBridgeApi {
   ping: () => Promise<PingResponse>
@@ -67,5 +91,11 @@ export interface MatBridgeApi {
      * function. Not a generic `on(channel, cb)` — this is the one fixed
      * channel it wraps, same narrow-bridge rule as every other method here. */
     onStatusChanged: (listener: (status: RuntimeStatus) => void) => () => void
+  }
+  telemetry: {
+    getSnapshot: () => Promise<TelemetrySnapshot | null>
+    /** Subscribes to every new reading (~every 1.5s); returns an
+     * unsubscribe function. Same one-fixed-channel rule as `onStatusChanged`. */
+    onSnapshotChanged: (listener: (snapshot: TelemetrySnapshot) => void) => () => void
   }
 }
