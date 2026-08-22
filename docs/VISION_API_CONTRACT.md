@@ -195,20 +195,36 @@ controls against a route that doesn't exist yet.
 ## Memory — `GET /memory`, auth required
 
 ```ts
-{ body_attached: bool, tiers: MemoryStats }   // "tiers" is a misleading field name —
-                                                // it's one stats object, not a per-tier map
+{ body_attached: bool, tiers: MemoryStats, health: MemoryHealth }
+// "tiers" is a misleading field name — it's one stats object, not a per-tier map
 
 interface MemoryStats {
   counts: { hot: number, warm: number, cold: number, archive: number }
   total_memories: number
   estimated_size_bytes: number
 }
+
+interface MemoryHealth {
+  module_ready: boolean               // did MemoryManager construct at all
+  qdrant: "online" | "offline" | "unknown"   // live network probe of the Qdrant
+                                              // server; "unknown" only when no body
+                                              // is attached to check it through
+  vector_store_connected: boolean     // THIS manager instance's own current
+                                       // connection state — can lag "qdrant: online"
+                                       // right after Qdrant restarts, until this
+                                       // instance's own lazy reconnect has run
+}
 ```
-Stale-while-revalidate on the server: first call after startup blocks; subsequent
-calls return a cached value refreshed in the background (TTL-based). Also degrades to
-`{body_attached: true, tiers: {}}` (empty dict, not the shape above) if the memory
-backend (Qdrant) is attached but unreachable — logged as a warning server-side, not
-an error to the caller. **A consumer must handle `tiers` being `{}`.**
+`tiers`: stale-while-revalidate on the server — first call after startup blocks;
+subsequent calls return a cached value refreshed in the background (TTL-based). Also
+degrades to `{}` (empty dict, not the shape above) if the memory backend (Qdrant) is
+attached but unreachable — logged as a warning server-side, not an error to the
+caller. **A consumer must handle `tiers` being `{}`.**
+
+`health`: three independently-grounded signals, never derived from one another or
+from `tiers` — see `MemoryHealth` in `api/schemas.py` and `Body.check_memory_health`
+(MAT-AI-OS-V2) for the exact composition. Always present, even when `tiers` is `{}`
+or `body_attached` is `false`.
 
 ## Governance — `GET /governance`, auth required
 

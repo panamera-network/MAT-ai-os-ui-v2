@@ -56,10 +56,14 @@ Scheduled/recurring work MAT runs on its own.
 ## Memory
 
 - **Read**: `GET /memory` — counts per tier (hot/warm/cold/archive), total memory
-  count, estimated size in bytes.
+  count, estimated size in bytes, plus a `health` object with three independently
+  -grounded signals (`module_ready`, `qdrant`, `vector_store_connected` — see
+  docs/VISION_API_CONTRACT.md's Memory section).
 - No route to browse individual memories, search, or delete — tier statistics only.
 - Can legitimately return an empty stats object even when a body is attached (memory
-  backend unreachable) — a real, non-error state to design for.
+  backend unreachable) — a real, non-error state to design for. `health` is always
+  present regardless, since it's computed independently of whether tier stats
+  themselves succeeded.
 
 ## Skills
 

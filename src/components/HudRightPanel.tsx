@@ -274,17 +274,40 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
   const servicesStatus = describeResourceStatus(services)
   const memoryStats = memory.data && hasMemoryStats(memory.data.tiers) ? memory.data.tiers : null
   const memoryLoading = memory.loading && !memory.data
-  const qdrantState = memoryStats
-    ? 'online'
-    : memory.data?.body_attached
+  const health = memory.data?.health
+  /** `GET /memory`'s `health` field carries three independently-grounded
+   * signals (see docs/VISION_API_CONTRACT.md's Memory section) — each row
+   * below reflects its own real field, never one shared bit relabeled three
+   * ways. Before a response exists at all (still loading, or the request
+   * failed outright) there's no per-row signal yet to disagree over, so all
+   * three share one fallback severity in row-appropriate wording; once
+   * `health` exists, each row is independent and can genuinely disagree
+   * with the others (e.g. Qdrant back online while this manager instance
+   * hasn't reconnected yet). */
+  const fallbackSeverity: 'checking' | 'degraded' | 'offline' = memoryLoading
+    ? 'checking'
+    : memory.error && !memory.error.unreachable
       ? 'degraded'
-      : memory.error && !memory.error.unreachable
-        ? 'degraded'
-        : memoryLoading
-          ? 'checking'
-          : 'offline'
-  const memoryModuleState = memoryStats ? 'ready' : 'unavailable'
-  const vectorStoreState = memoryStats ? 'connected' : 'disconnected'
+      : 'offline'
+  const qdrantState = !health
+    ? fallbackSeverity
+    : health.qdrant === 'unknown'
+      ? 'checking'
+      : health.qdrant
+  const memoryModuleState = !health
+    ? fallbackSeverity === 'offline'
+      ? 'unavailable'
+      : fallbackSeverity
+    : health.module_ready
+      ? 'ready'
+      : 'unavailable'
+  const vectorStoreState = !health
+    ? fallbackSeverity === 'offline'
+      ? 'disconnected'
+      : fallbackSeverity
+    : health.vector_store_connected
+      ? 'connected'
+      : 'disconnected'
   const tierMetrics = [
     { label: 'Hot', value: memoryStats?.counts.hot ?? 0 },
     { label: 'Warm', value: memoryStats?.counts.warm ?? 0 },

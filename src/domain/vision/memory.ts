@@ -28,4 +28,22 @@ export function hasMemoryStats(tiers: MemoryTiers): tiers is MemoryStats {
   return 'counts' in tiers
 }
 
-export type MemoryResult = BodyScoped<{ tiers: MemoryTiers }>
+/**
+ * Three independently-grounded signals, never derived from one another or
+ * from `tiers` — see docs/VISION_API_CONTRACT.md's Memory section and
+ * `api/schemas.py::MemoryHealth` (MAT-AI-OS-V2). Always present, even when
+ * `tiers` is `{}` or `body_attached` is `false`.
+ */
+export interface MemoryHealth {
+  /** Did `MemoryManager` construct at all — a structural fact, not a live probe. */
+  module_ready: boolean
+  /** Live network probe of the Qdrant server itself. `'unknown'` only when no
+   * body is attached to check it through — never a guessed `'offline'`. */
+  qdrant: 'online' | 'offline' | 'unknown'
+  /** THIS manager instance's own current connection state — can lag
+   * `qdrant: 'online'` right after Qdrant restarts, until this instance's own
+   * lazy reconnect has actually run. */
+  vector_store_connected: boolean
+}
+
+export type MemoryResult = BodyScoped<{ tiers: MemoryTiers; health: MemoryHealth }>
