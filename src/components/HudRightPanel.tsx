@@ -15,7 +15,8 @@ const PRIMARY_SERVICES = [
   { id: 'strategy_engine', label: 'Strategy Engine' },
   { id: 'engine_dashboard', label: 'Engine Dashboard' },
   { id: 'os_ui_mobile', label: 'OS UI Mobile' },
-  { id: 'mk1_x', label: 'MK1-X' },
+  { id: 'mk1', label: 'MK1' },
+  { id: 'mk1_mobile', label: 'MK1 Mobile' },
 ]
 
 const DEFAULT_SERVICE_IDS = PRIMARY_SERVICES.map((service) => service.id)

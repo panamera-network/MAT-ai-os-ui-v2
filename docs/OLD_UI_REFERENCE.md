@@ -96,7 +96,7 @@ trim is itself useful reference material, not just the leftover code.
   `SERVICES` section at the top driven by `useLauncher()` (Launcher's own
   `core`/`engine`/`dashboard`/`mk1`/`mobile`/`mk1_mobile` set, port 8050) *and* a
   `Services` card in the Core Engine grid driven by the real VISION API's
-  `/services` (`vision`/`strategy_engine`/`engine_dashboard`/`os_ui_mobile`/`mk1_x`).
+  `/services` (`vision`/`strategy_engine`/`engine_dashboard`/`os_ui_mobile`/`mk1`/`mk1_mobile`).
   Two different id sets, two different backends, one visual language ("Services"),
   on the same screen. A V2 rebuild should either pick one clear source of truth per
   concept or visually separate "OS-level process supervisor" from "VISION's own

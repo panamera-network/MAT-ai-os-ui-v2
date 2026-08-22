@@ -1,6 +1,7 @@
 /**
  * Config-driven, fixed set of external processes MAT supervises directly:
- * `vision`, `strategy_engine`, `engine_dashboard`, `os_ui_mobile`, `mk1_x`.
+ * `vision`, `strategy_engine`, `engine_dashboard`, `os_ui_mobile`, `mk1`,
+ * `mk1_mobile`.
  * NOT the same thing as the old MAT-AI-OS-ui's `LauncherContext` (a separate
  * process on port 8050 with its own, differently-shaped service set) — see
  * docs/VISION_API_CONTRACT.md's Services section and

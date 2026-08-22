@@ -81,7 +81,7 @@ MAT's own LLM routing configuration — distinct from Body, never shared with it
 
 External process supervision for the MAT.ai ecosystem, config-driven and fixed:
 `vision` (MAT/Body itself), `strategy_engine`, `engine_dashboard`, `os_ui_mobile`,
-`mk1_x`.
+`mk1`, `mk1_mobile`.
 
 - **Read**: `GET /services` (all), `GET /services/{id}` (one) — configured flag,
   state (`running`/`degraded`/`stopped`/`unconfigured`/`unknown_service`), and a

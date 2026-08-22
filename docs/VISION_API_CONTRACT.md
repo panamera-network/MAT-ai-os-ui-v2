@@ -354,7 +354,7 @@ Config-driven, fixed set of external processes MAT supervises directly (never a
 shell string — argv lists only). One instance of this set exists per machine, built
 from what's actually installed (`service_supervisor.py::_build_definitions`):
 `vision` (thin pass-through to Control, not a real subprocess), `strategy_engine`,
-`engine_dashboard`, `os_ui_mobile`, `mk1_x`.
+`engine_dashboard`, `os_ui_mobile`, `mk1`, `mk1_mobile`.
 
 ```ts
 interface ServiceStatus {
