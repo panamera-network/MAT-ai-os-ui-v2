@@ -74,6 +74,26 @@ export interface SpeakRequest {
   text: string
 }
 
+export interface LearnRequest {
+  content: string
+  /** Bounded recent-conversation text, caller-assembled — same "hand it in
+   * already assembled" contract as `ThinkRequest.context`. */
+  context?: string
+}
+
+export interface LearnResult {
+  /** "learned": actually applied to the skill registry. "pending_approval":
+   * governance passed but the decision (a new domain) is consequential
+   * enough to hold as an unresolved suggestion. "rejected": failed
+   * security/quality/relevance. "failed": governance passed but applying it
+   * raised. */
+  status: 'learned' | 'pending_approval' | 'rejected' | 'failed'
+  reason: string
+  suggestion_id: string | null
+  skill_id: string | null
+  domain: string | null
+}
+
 /** `/speak` responds with raw audio bytes, not JSON — this is what the
  * adapter turns that into. */
 export interface SpeakResult {

@@ -7,6 +7,8 @@ import type {
   Health,
   IdentityResult,
   KillResult,
+  LearnRequest,
+  LearnResult,
   ListenRequest,
   ListenResult,
   LoopsResult,
@@ -51,6 +53,7 @@ export interface VisionApiAdapter {
   see(request: SeeRequest, signal?: AbortSignal): Promise<SeeResult>
   listen(request: ListenRequest, signal?: AbortSignal): Promise<ListenResult>
   speak(request: SpeakRequest, signal?: AbortSignal): Promise<SpeakResult>
+  learn(request: LearnRequest, signal?: AbortSignal): Promise<LearnResult>
 
   getSoul(signal?: AbortSignal): Promise<SoulResult>
   getIdentity(signal?: AbortSignal): Promise<IdentityResult>

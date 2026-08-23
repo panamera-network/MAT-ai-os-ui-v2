@@ -316,7 +316,8 @@
 }
 
 .activity-panel__attach,
-.activity-panel__mic {
+.activity-panel__mic,
+.activity-panel__learn {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -334,7 +335,8 @@
 }
 
 .activity-panel__attach:hover:not(:disabled),
-.activity-panel__mic:hover:not(:disabled) {
+.activity-panel__mic:hover:not(:disabled),
+.activity-panel__learn:hover:not(:disabled) {
   border-color: rgba(125, 230, 255, 0.4);
   color: var(--hud-text);
 }
@@ -351,7 +353,8 @@
 }
 
 .activity-panel__attach:disabled,
-.activity-panel__mic:disabled {
+.activity-panel__mic:disabled,
+.activity-panel__learn:disabled {
   cursor: not-allowed;
   opacity: 0.4;
 }

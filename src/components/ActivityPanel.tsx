@@ -9,6 +9,7 @@ interface ActivityPanelProps {
   pending: boolean
   onSend: (text: string) => void
   onSendImage: (prompt: string, images: File[]) => void
+  onLearn: (content: string) => void
   onReset: () => void
   voiceState: VoiceState
   voiceError: string | null
@@ -30,6 +31,7 @@ export function ActivityPanel({
   pending,
   onSend,
   onSendImage,
+  onLearn,
   onReset,
   voiceState,
   voiceError,
@@ -58,6 +60,12 @@ export function ActivityPanel({
       if (!input.trim()) return
       onSend(input)
     }
+    setInput('')
+  }
+
+  const learn = () => {
+    if (pending || !online || !input.trim() || attachment) return
+    onLearn(input)
     setInput('')
   }
 
@@ -194,6 +202,16 @@ export function ActivityPanel({
             disabled={!online || busy}
           />
         </div>
+        <button
+          type="button"
+          className="activity-panel__learn"
+          onClick={learn}
+          disabled={!online || pending || !input.trim() || Boolean(attachment)}
+          aria-label="Learn this"
+          title="Explicitly teach MAT this content (goes through governance review, distinct from Send)"
+        >
+          📚
+        </button>
         <button
           type="button"
           className="activity-panel__send"

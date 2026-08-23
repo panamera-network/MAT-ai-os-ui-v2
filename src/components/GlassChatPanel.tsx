@@ -10,6 +10,7 @@ interface GlassChatPanelProps {
   pending: boolean
   onSend: (text: string) => void
   onSendImage: (prompt: string, images: File[]) => void
+  onLearn: (content: string) => void
   onReset: () => void
   voiceState: VoiceState
   voiceError: string | null

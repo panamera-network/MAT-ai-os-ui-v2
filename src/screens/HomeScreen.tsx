@@ -31,7 +31,7 @@ import type { HudEvent, HudEventTone } from '../components/hudEvents'
 export function HomeScreen() {
   const [view, setView] = useState<ActiveCanvasView>('presence')
   const { connection, health } = useHealth()
-  const { messages, pending, send, sendImage, reset } = useThink()
+  const { messages, pending, send, sendImage, sendLearn, reset } = useThink()
   const { voiceState, voiceError, startRecording, stopRecording } = useVoice(send)
   const { speakingId, speak } = useSpeak()
   const [hudEvents, setHudEvents] = useState<HudEvent[]>([])
@@ -68,6 +68,7 @@ export function HomeScreen() {
           pending={pending}
           onSend={send}
           onSendImage={sendImage}
+          onLearn={sendLearn}
           onReset={reset}
           voiceState={voiceState}
           voiceError={voiceError}

@@ -7,6 +7,8 @@ import type {
   Health,
   IdentityResult,
   KillResult,
+  LearnRequest,
+  LearnResult,
   ListenRequest,
   ListenResult,
   LoopsResult,
@@ -156,6 +158,10 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
     if (!response.ok) throw await this.errorFor(response)
     const audio = await response.blob()
     return { audio, contentType: response.headers.get('content-type') ?? 'application/octet-stream' }
+  }
+
+  learn(request: LearnRequest, signal?: AbortSignal): Promise<LearnResult> {
+    return this.requestJson<LearnResult>('/learn', { ...this.jsonInit(request), signal: this.reasoningSignal(signal) })
   }
 
   getSoul(signal?: AbortSignal): Promise<SoulResult> {
