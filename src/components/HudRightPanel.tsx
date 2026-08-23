@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { hasMemoryStats, isServiceOn } from '../domain/vision'
-import type { ServiceStatus, VisionEventEntry } from '../domain/vision'
+import type { LearnSuggestionDetail, LearnSuggestionSummary, ServiceStatus, VisionEventEntry } from '../domain/vision'
 import { useServices } from '../hooks/useServices'
 import { useMemoryStats } from '../hooks/useMemoryStats'
 import { useBodyControl } from '../hooks/useBodyControl'
 import { useServiceControl } from '../hooks/useServiceControl'
 import { useEvents } from '../hooks/useEvents'
+import { usePendingLearn } from '../hooks/usePendingLearn'
 import { describeResourceStatus } from '../hooks/useVisionResource'
 import type { AddHudEvent, HudEvent, HudEventTone } from './hudEvents'
 import './HudRightPanel.css'
@@ -230,6 +231,136 @@ function UnavailableServiceRow({ label, status }: { label: string; status: strin
   )
 }
 
+function LearnApprovalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
+      <path d="M8 1.6 13.2 3.4v3.9c0 3.4-2.2 5.9-5.2 7.1-3-1.2-5.2-3.7-5.2-7.1V3.4L8 1.6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M5.6 8.1 7.3 9.8l3.1-3.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function formatSuggestionTime(iso: string): string {
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }).format(parsed)
+}
+
+interface PendingLearnRowProps {
+  suggestion: LearnSuggestionSummary
+  busy: boolean
+  lastResult: { suggestionId: string; status: string; reason: string } | null
+  fetchDetail: (suggestionId: string) => Promise<LearnSuggestionDetail>
+  onResolve: (suggestionId: string, action: 'approve' | 'reject') => void
+}
+
+/** One pending `new_domain` suggestion — a real `LearnSuggestionManager`
+ * record, never fabricated. Collapsed shows just enough to recognize it
+ * (domain + reason); expanding fetches the real `GET /learn/pending/{id}`
+ * detail (the proposed skill's own name/description/prompt fragment) so an
+ * operator can actually judge WHY MAT wants to learn this before acting. */
+function PendingLearnRow({ suggestion, busy, lastResult, fetchDetail, onResolve }: PendingLearnRowProps) {
+  const [expanded, setExpanded] = useState(false)
+  const [detail, setDetail] = useState<LearnSuggestionDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const toggle = () => {
+    const next = !expanded
+    setExpanded(next)
+    if (next && !detail) {
+      setDetailLoading(true)
+      fetchDetail(suggestion.id)
+        .then(setDetail)
+        .catch(() => {
+          // A failed detail fetch just means the row stays collapsed-ish
+          // (no proposed name/description/prompt) — the summary fields
+          // already shown are still real and still enough to Approve/Reject.
+        })
+        .finally(() => setDetailLoading(false))
+    }
+  }
+
+  const result = lastResult?.suggestionId === suggestion.id ? lastResult : null
+
+  return (
+    <div className="hud-pending-learn-row">
+      <button type="button" className="hud-pending-learn-row__summary" onClick={toggle} aria-expanded={expanded}>
+        <span className="hud-pending-learn-row__dot" aria-hidden="true" />
+        <span className="hud-pending-learn-row__domain">{suggestion.domain ?? suggestion.operation}</span>
+        <span className="hud-pending-learn-row__reason">{suggestion.reason}</span>
+        <time>{formatSuggestionTime(suggestion.created_at)}</time>
+      </button>
+      {expanded && (
+        <div className="hud-pending-learn-row__detail">
+          {detailLoading && <span className="hud-pending-learn-row__loading">Loading detail…</span>}
+          {detail && (
+            <>
+              <div className="hud-pending-learn-row__field">
+                <span>Proposed skill</span>
+                <strong>{detail.proposed.name ?? suggestion.target_skill_id ?? '—'}</strong>
+              </div>
+              {detail.proposed.description && <p className="hud-pending-learn-row__description">{detail.proposed.description}</p>}
+              {detail.proposed.prompt_fragment && (
+                <p className="hud-pending-learn-row__fragment">{detail.proposed.prompt_fragment}</p>
+              )}
+            </>
+          )}
+          {result ? (
+            <span className={`hud-pending-learn-row__result hud-pending-learn-row__result--${result.status}`}>
+              {result.status === 'learned' ? 'Learned.' : result.status === 'rejected' ? 'Rejected.' : `Failed — ${result.reason}`}
+            </span>
+          ) : (
+            <div className="hud-pending-learn-row__actions">
+              <button type="button" className="hud-pending-learn-row__approve" disabled={busy} onClick={() => onResolve(suggestion.id, 'approve')}>
+                Approve
+              </button>
+              <button type="button" className="hud-pending-learn-row__reject" disabled={busy} onClick={() => onResolve(suggestion.id, 'reject')}>
+                Reject
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Real `GET /learn/pending` queue — the operator-review half of the
+ * new-domain Learn flow (`/learn` itself auto-confirms create/improve;
+ * only a brand-new domain ever lands here). Never mixed with MCP's own
+ * pending-approvals count in the left panel — a different approval
+ * concept entirely, no shared abstraction exists to fold them into. */
+function PendingLearnCard() {
+  const { suggestions, loading, pendingId, lastResult, resolve, fetchDetail } = usePendingLearn()
+  if (!loading && suggestions.length === 0) return null
+
+  return (
+    <section className="hud-right-panel__card hud-pending-learn-card">
+      <header className="hud-right-panel__card-header">
+        <LearnApprovalIcon />
+        <span>Learn Approvals</span>
+        {suggestions.length > 0 && <span className="hud-pending-learn-card__count">{suggestions.length}</span>}
+      </header>
+      <div className="hud-pending-learn-card__list">
+        {loading && suggestions.length === 0 ? (
+          <span className="hud-right-panel__events-empty">Loading…</span>
+        ) : (
+          suggestions.map((suggestion) => (
+            <PendingLearnRow
+              key={suggestion.id}
+              suggestion={suggestion}
+              busy={pendingId === suggestion.id}
+              lastResult={lastResult}
+              fetchDetail={fetchDetail}
+              onResolve={resolve}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  )
+}
+
 function RecentEvents({ events }: { events: HudEvent[] }) {
   const [expanded, setExpanded] = useState(false)
   const visibleEvents = expanded ? events : events.slice(0, 5)
@@ -446,6 +577,8 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
           )}
         </div>
       </section>
+
+      <PendingLearnCard />
 
       <section className="hud-right-panel__card hud-right-panel__memory-card">
         <header className="hud-right-panel__card-header hud-memory__header">

@@ -9,6 +9,7 @@ import type {
   KillResult,
   LearnRequest,
   LearnResult,
+  LearnSuggestionDetail,
   ListenRequest,
   ListenResult,
   LoopsResult,
@@ -16,6 +17,7 @@ import type {
   MemoryResult,
   ModelSelectRequest,
   ModelsResult,
+  PendingLearnSuggestionsResult,
   RestartResult,
   SeeRequest,
   SeeResult,
@@ -54,6 +56,10 @@ export interface VisionApiAdapter {
   listen(request: ListenRequest, signal?: AbortSignal): Promise<ListenResult>
   speak(request: SpeakRequest, signal?: AbortSignal): Promise<SpeakResult>
   learn(request: LearnRequest, signal?: AbortSignal): Promise<LearnResult>
+  getPendingLearnSuggestions(signal?: AbortSignal): Promise<PendingLearnSuggestionsResult>
+  getLearnSuggestion(suggestionId: string, signal?: AbortSignal): Promise<LearnSuggestionDetail>
+  approveLearnSuggestion(suggestionId: string, signal?: AbortSignal): Promise<LearnResult>
+  rejectLearnSuggestion(suggestionId: string, signal?: AbortSignal): Promise<LearnResult>
 
   getSoul(signal?: AbortSignal): Promise<SoulResult>
   getIdentity(signal?: AbortSignal): Promise<IdentityResult>

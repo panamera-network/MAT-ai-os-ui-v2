@@ -94,6 +94,37 @@ export interface LearnResult {
   domain: string | null
 }
 
+/** One `LearnSuggestionManager` record's own real fields, trimmed for review
+ * — a `new_domain` decision `/learn` left pending. */
+export interface LearnSuggestionSummary {
+  id: string
+  operation: string
+  target_skill_id: string | null
+  domain: string | null
+  reason: string
+  source: string
+  requested_by: string
+  created_at: string
+  expires_at: string
+}
+
+/** Same fields as the summary, plus the complete governance decision
+ * snapshot (`GovernanceLayer.evaluate()`'s own "suggest" shape) this
+ * suggestion would apply on approval. */
+export interface LearnSuggestionDetail extends LearnSuggestionSummary {
+  proposed: {
+    name?: string
+    description?: string
+    prompt_fragment?: string
+    tools_required?: string[]
+    [key: string]: unknown
+  }
+}
+
+export interface PendingLearnSuggestionsResult {
+  suggestions: LearnSuggestionSummary[]
+}
+
 /** `/speak` responds with raw audio bytes, not JSON — this is what the
  * adapter turns that into. */
 export interface SpeakResult {

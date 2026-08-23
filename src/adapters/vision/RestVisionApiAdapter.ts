@@ -9,6 +9,7 @@ import type {
   KillResult,
   LearnRequest,
   LearnResult,
+  LearnSuggestionDetail,
   ListenRequest,
   ListenResult,
   LoopsResult,
@@ -16,6 +17,7 @@ import type {
   MemoryResult,
   ModelSelectRequest,
   ModelsResult,
+  PendingLearnSuggestionsResult,
   RestartResult,
   SeeRequest,
   SeeResult,
@@ -162,6 +164,22 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
 
   learn(request: LearnRequest, signal?: AbortSignal): Promise<LearnResult> {
     return this.requestJson<LearnResult>('/learn', { ...this.jsonInit(request), signal: this.reasoningSignal(signal) })
+  }
+
+  getPendingLearnSuggestions(signal?: AbortSignal): Promise<PendingLearnSuggestionsResult> {
+    return this.requestJson<PendingLearnSuggestionsResult>('/learn/pending', { signal })
+  }
+
+  getLearnSuggestion(suggestionId: string, signal?: AbortSignal): Promise<LearnSuggestionDetail> {
+    return this.requestJson<LearnSuggestionDetail>(`/learn/pending/${encodeURIComponent(suggestionId)}`, { signal })
+  }
+
+  approveLearnSuggestion(suggestionId: string, signal?: AbortSignal): Promise<LearnResult> {
+    return this.requestJson<LearnResult>(`/learn/pending/${encodeURIComponent(suggestionId)}/approve`, { method: 'POST', signal })
+  }
+
+  rejectLearnSuggestion(suggestionId: string, signal?: AbortSignal): Promise<LearnResult> {
+    return this.requestJson<LearnResult>(`/learn/pending/${encodeURIComponent(suggestionId)}/reject`, { method: 'POST', signal })
   }
 
   getSoul(signal?: AbortSignal): Promise<SoulResult> {

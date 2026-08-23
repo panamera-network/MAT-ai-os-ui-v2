@@ -724,6 +724,190 @@
   overflow-wrap: anywhere;
 }
 
+.hud-pending-learn-card {
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.hud-pending-learn-card .hud-right-panel__card-header {
+  color: var(--hud-amber);
+}
+
+.hud-pending-learn-card__count {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  color: var(--hud-amber);
+  font-size: calc(7px + var(--hud-font-boost));
+}
+
+.hud-pending-learn-card__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-color: rgba(125, 230, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.hud-pending-learn-row {
+  border: 1px solid rgba(245, 158, 11, 0.16);
+  border-radius: 4px;
+  background: rgba(88, 54, 10, 0.08);
+}
+
+.hud-pending-learn-row__summary {
+  display: grid;
+  grid-template-columns: 6px auto 1fr auto;
+  align-items: center;
+  width: 100%;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--hud-text-muted);
+  font-family: var(--hud-font-mono);
+  font-size: calc(8px + var(--hud-font-boost));
+  text-align: left;
+  cursor: pointer;
+}
+
+.hud-pending-learn-row__dot {
+  width: 5px;
+  height: 5px;
+  border: 1px solid var(--hud-amber);
+  border-radius: 50%;
+  color: var(--hud-amber);
+  box-shadow: 0 0 5px currentColor;
+}
+
+.hud-pending-learn-row__domain {
+  color: var(--hud-amber);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hud-pending-learn-row__reason {
+  overflow: hidden;
+  color: var(--hud-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-pending-learn-row__summary time {
+  color: var(--hud-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-pending-learn-row__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 9px;
+  font-size: calc(8px + var(--hud-font-boost));
+}
+
+.hud-pending-learn-row__loading {
+  color: var(--hud-text-faint);
+}
+
+.hud-pending-learn-row__field {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--hud-text-muted);
+}
+
+.hud-pending-learn-row__field strong {
+  color: var(--hud-text);
+}
+
+.hud-pending-learn-row__description,
+.hud-pending-learn-row__fragment {
+  margin: 0;
+  color: var(--hud-text-muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.hud-pending-learn-row__fragment {
+  padding: 6px 7px;
+  border: 1px solid rgba(184, 163, 255, 0.14);
+  border-radius: 3px;
+  background: rgba(5, 11, 19, 0.3);
+  color: var(--hud-text);
+}
+
+.hud-pending-learn-row__actions {
+  display: flex;
+  gap: 7px;
+}
+
+.hud-pending-learn-row__approve,
+.hud-pending-learn-row__reject {
+  flex: 1 1 0;
+  padding: 5px 0;
+  border: 1px solid;
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--hud-font-mono);
+  font-size: calc(7px + var(--hud-font-boost));
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.hud-pending-learn-row__approve {
+  border-color: rgba(74, 222, 128, 0.4);
+  color: var(--hud-green);
+  background: rgba(20, 66, 40, 0.18);
+}
+
+.hud-pending-learn-row__approve:hover:not(:disabled) {
+  background: rgba(74, 222, 128, 0.14);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.16);
+}
+
+.hud-pending-learn-row__reject {
+  border-color: rgba(239, 68, 68, 0.38);
+  color: var(--hud-red);
+  background: rgba(91, 21, 28, 0.16);
+}
+
+.hud-pending-learn-row__reject:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.14);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.16);
+}
+
+.hud-pending-learn-row__approve:disabled,
+.hud-pending-learn-row__reject:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hud-pending-learn-row__result {
+  padding: 5px 0;
+  text-align: center;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.hud-pending-learn-row__result--learned {
+  color: var(--hud-green);
+}
+
+.hud-pending-learn-row__result--rejected {
+  color: var(--hud-text-muted);
+}
+
+.hud-pending-learn-row__result--failed {
+  color: var(--hud-red);
+}
+
 @media (max-height: 760px) {
   .hud-right-panel__card {
     gap: 7px;
