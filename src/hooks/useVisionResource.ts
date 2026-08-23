@@ -12,13 +12,29 @@ interface UseVisionResourceResult<T> {
   refetch: () => void
 }
 
+/** How long to wait before retrying a fetch that failed because MAT simply
+ * wasn't reachable yet — never for a genuine HTTP error response, see below. */
+const RETRY_WHILE_UNREACHABLE_MS = 3000
+
 /**
  * Fetch-on-mount (and on `refetch()`) for a single VISION API read endpoint —
  * the shared shape every Glass HUD snapshot hook (`useAgents`, `useLoops`,
- * ...) wraps. Not polled like `useHealth`'s connection state: these are
- * glance-and-load snapshots, not a signal that needs to stay live.
+ * ...) wraps. Not polled like `useHealth`'s connection state once loaded:
+ * these are glance-and-load snapshots, not a signal that needs to stay live.
  * `fetcher` must be a stable (module-scope) function reference, not an
  * inline closure, or this refetches every render.
+ *
+ * Real bug found via live testing: every consumer of this hook mounts
+ * immediately with the rest of the HUD, well before MAT is necessarily
+ * reachable (a cold start — Qdrant recovering existing collections, MAT's
+ * own real embedder load — can now take well over a minute). The one-shot
+ * fetch this used to be caught that failure and never tried again, so the
+ * whole right/left panel got stuck showing "offline" forever on every
+ * launch, even once MAT genuinely came up seconds later. This now retries
+ * on a fixed interval specifically while `error.unreachable` (status `0` —
+ * couldn't reach MAT at all, not a real response) stays true; a genuine
+ * HTTP error response (auth, 500, ...) is left as-is, since blindly
+ * retrying that wouldn't fix it.
  */
 export function useVisionResource<T>(fetcher: (api: VisionApiAdapter, signal: AbortSignal) => Promise<T>): UseVisionResourceResult<T> {
   const api = useVisionApi()
@@ -29,6 +45,7 @@ export function useVisionResource<T>(fetcher: (api: VisionApiAdapter, signal: Ab
 
   useEffect(() => {
     const controller = new AbortController()
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
     setLoading(true)
     fetcher(api, controller.signal)
       .then((result) => {
@@ -37,12 +54,19 @@ export function useVisionResource<T>(fetcher: (api: VisionApiAdapter, signal: Ab
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return
-        setError(err instanceof VisionApiError ? err : null)
+        const visionError = err instanceof VisionApiError ? err : null
+        setError(visionError)
+        if (visionError?.unreachable) {
+          retryTimer = setTimeout(() => setRefreshToken((n) => n + 1), RETRY_WHILE_UNREACHABLE_MS)
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      if (retryTimer) clearTimeout(retryTimer)
+    }
   }, [api, fetcher, refreshToken])
 
   return { data, error, loading, refetch: () => setRefreshToken((n) => n + 1) }

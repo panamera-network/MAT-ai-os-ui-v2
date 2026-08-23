@@ -2,6 +2,7 @@ import type {
   AgentsResult,
   ControlActionResult,
   ControlStatusResult,
+  EventsResult,
   GovernanceResult,
   Health,
   IdentityResult,
@@ -63,6 +64,7 @@ export interface VisionApiAdapter {
 
   getAgents(signal?: AbortSignal): Promise<AgentsResult>
   getLoops(signal?: AbortSignal): Promise<LoopsResult>
+  getEvents(limit?: number, signal?: AbortSignal): Promise<EventsResult>
   getMemory(signal?: AbortSignal): Promise<MemoryResult>
   getGovernance(signal?: AbortSignal): Promise<GovernanceResult>
   getMcp(signal?: AbortSignal): Promise<McpResult>

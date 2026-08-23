@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { hasMemoryStats, isServiceOn } from '../domain/vision'
-import type { ServiceStatus } from '../domain/vision'
+import type { ServiceStatus, VisionEventEntry } from '../domain/vision'
 import { useServices } from '../hooks/useServices'
 import { useMemoryStats } from '../hooks/useMemoryStats'
 import { useBodyControl } from '../hooks/useBodyControl'
 import { useServiceControl } from '../hooks/useServiceControl'
+import { useEvents } from '../hooks/useEvents'
 import { describeResourceStatus } from '../hooks/useVisionResource'
 import type { AddHudEvent, HudEvent, HudEventTone } from './hudEvents'
 import './HudRightPanel.css'
@@ -147,6 +148,20 @@ function formatEventTime(timestamp: number): string {
   }).format(new Date(timestamp))
 }
 
+/** Real backend activity (`GET /events`) into the same `HudEvent` shape the
+ * session-local click log already uses — one merged, chronological feed,
+ * same row rendering either way. `severity`/`tone` share their exact union
+ * type already (`api/schemas.py::EventEntry` <-> `hudEvents.ts`), so this is
+ * a reshape, never a remapping. */
+function toHudEvent(entry: VisionEventEntry): HudEvent {
+  return {
+    id: `backend-${entry.id}`,
+    timestamp: new Date(entry.timestamp).getTime(),
+    message: entry.message,
+    tone: entry.severity,
+  }
+}
+
 /** `unconfigured`/`unknown_service` can't be toggled at all: there's nothing
  * real to start. */
 function isServiceToggleable(state: ServiceStatus['state']): boolean {
@@ -244,7 +259,7 @@ function RecentEvents({ events }: { events: HudEvent[] }) {
               <span className="hud-event-row__message">{event.message}</span>
             </div>
           )) : (
-            <span className="hud-right-panel__events-empty">Actions in this session will appear here.</span>
+            <span className="hud-right-panel__events-empty">MAT activity and session actions will appear here.</span>
           )}
         </div>
       </section>
@@ -263,7 +278,17 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
   const memory = useMemoryStats()
   const control = useBodyControl()
   const serviceControl = useServiceControl()
+  const backendEvents = useEvents()
   const [showAllServices, setShowAllServices] = useState(false)
+
+  // Real MAT activity (error log + learning analytics, merged server-side)
+  // alongside this session's own UI-action markers — two genuinely different
+  // kinds of "what happened", shown in one chronological feed rather than
+  // replacing one with the other.
+  const mergedEvents = useMemo(() => {
+    const fromBackend = (backendEvents.data?.events ?? []).map(toHudEvent)
+    return [...events, ...fromBackend].sort((a, b) => b.timestamp - a.timestamp)
+  }, [events, backendEvents.data])
 
   const allServices = services.data?.services ?? []
   const primaryServiceSlots = PRIMARY_SERVICES.map((target) => ({
@@ -464,7 +489,7 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
         {memoryNote && <div className="hud-memory__error"><span>Last state</span>{memoryNote}</div>}
       </section>
 
-      <RecentEvents events={events} />
+      <RecentEvents events={mergedEvents} />
     </div>
   )
 }

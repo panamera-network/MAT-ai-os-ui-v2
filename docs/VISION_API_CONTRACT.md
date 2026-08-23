@@ -226,6 +226,28 @@ from `tiers` — see `MemoryHealth` in `api/schemas.py` and `Body.check_memory_h
 (MAT-AI-OS-V2) for the exact composition. Always present, even when `tiers` is `{}`
 or `body_attached` is `false`.
 
+## Events — `GET /events?limit=50`, auth required
+
+```ts
+{ body_attached: bool, events: EventEntry[] }
+
+interface EventEntry {
+  id: string            // globally unique — "error-<id>" or "learning-<index>-<timestamp>"
+  timestamp: string      // ISO 8601, not epoch millis
+  source: "error" | "learning"
+  type: string            // e.g. "error_logged", "learned", "improved", "rejected", ...
+  message: string
+  severity: "info" | "success" | "warning" | "danger"
+}
+```
+Real MAT activity, merged server-side from two independent, already-persisted logs —
+`ErrorLogManager` (every ERROR+ log anywhere in the process) and `LearningAnalytics`
+(governance/learning decisions) — sorted newest-first, never a new log of its own.
+Each source degrades independently: one being unavailable never takes the other down
+with it. `limit` is clamped to 200 server-side. This is distinct from the HUD's
+session-local click log (`hudEvents.ts`) — the two are merged client-side into one
+Recent Events feed (`HudRightPanel.tsx`), not a replacement of one by the other.
+
 ## Governance — `GET /governance`, auth required
 
 ```ts

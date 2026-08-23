@@ -2,6 +2,7 @@ import type {
   AgentsResult,
   ControlActionResult,
   ControlStatusResult,
+  EventsResult,
   GovernanceResult,
   Health,
   IdentityResult,
@@ -203,6 +204,11 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
 
   getLoops(signal?: AbortSignal): Promise<LoopsResult> {
     return this.requestJson<LoopsResult>('/loops', { signal })
+  }
+
+  getEvents(limit?: number, signal?: AbortSignal): Promise<EventsResult> {
+    const query = limit !== undefined ? `?limit=${encodeURIComponent(limit)}` : ''
+    return this.requestJson<EventsResult>(`/events${query}`, { signal })
   }
 
   getMemory(signal?: AbortSignal): Promise<MemoryResult> {

@@ -65,6 +65,15 @@ Scheduled/recurring work MAT runs on its own.
   present regardless, since it's computed independently of whether tier stats
   themselves succeeded.
 
+## Events
+
+- **Read**: `GET /events?limit=50` — real MAT activity, merged server-side from the
+  error log and learning analytics into one chronological, severity-tagged feed.
+- No route to resolve/dismiss an event — read-only, same as every other Body-scoped
+  route here.
+- The HUD merges this with its own session-local click log client-side (two genuinely
+  different kinds of "what happened"), not a replacement of one by the other.
+
 ## Skills
 
 - **Read**: `GET /skills` — id, name, domain, description, tools required, prompt
