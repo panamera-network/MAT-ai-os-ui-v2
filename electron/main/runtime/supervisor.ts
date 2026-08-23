@@ -6,6 +6,7 @@ import type { RuntimeConfig } from './config'
 import { probePort, killPortOwner } from './portProbe'
 import { checkHealth } from './healthCheck'
 import { logRuntimeLine } from './log'
+import { loadMatEnvFileOverrides } from './envFile'
 
 const HEALTH_TIMEOUT_MS = 3000
 const START_POLL_INTERVAL_MS = 1000
@@ -122,9 +123,21 @@ export class RuntimeSupervisor extends EventEmitter {
       this.setStatus('starting', false, null, 'Starting MAT (python -m ops)…')
       this.childExited = false
       this.lastStderrLine = ''
+      // `.env.mat`/`.env.body` values first (lowest priority) — `ops` itself
+      // never auto-loads these (see `envFile.ts`'s own doc comment for why
+      // that stays true), this app reads them on its behalf. Real process
+      // env, if the launcher's own shell/environment already set something,
+      // always wins over the file below.
+      const envFileOverrides = loadMatEnvFileOverrides(this.config.repoPath)
+      const envFileKeys = Object.keys(envFileOverrides)
+      if (envFileKeys.length > 0) {
+        // Key names only, never values — several of these are real secrets.
+        logRuntimeLine(`loaded ${envFileKeys.length} var(s) from .env.mat/.env.body: ${envFileKeys.join(', ')}`)
+      }
       const child = spawn(this.config.pythonPath, ['-m', 'ops'], {
         cwd: this.config.repoPath,
         env: {
+          ...envFileOverrides,
           ...process.env,
           MAT_HOST: process.env.MAT_HOST ?? this.config.host,
           MAT_PORT: process.env.MAT_PORT ?? String(this.config.port),

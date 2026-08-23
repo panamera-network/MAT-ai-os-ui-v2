@@ -177,6 +177,22 @@ instance or touches a process it didn't start). Nothing listening -> spawn
 `<repoPath>/.venv/Scripts/python.exe -m ops` (`owned: true`), poll `/health` until
 it answers or a timeout elapses.
 
+**`.env.mat`/`.env.body` (`electron/main/runtime/envFile.ts`)**: `ops` itself
+deliberately never auto-loads these — `ops.config.load_config()` reads straight
+from real process environment variables, no dotenv anywhere in that codebase.
+This app reads them on the operator's behalf instead: before every spawn (never
+on attach — nothing to configure for a process this app didn't start),
+`.env.mat` then `.env.body` (overriding on any shared key — `.env.body`'s own
+key set is the superset) are folded into the child's `env`, real process env
+always winning over the file. `ops` itself still only ever sees plain
+environment variables, exactly as before — this only changes who populates
+them. One key is deliberately excluded: `MAT_API_KEY` enables `X-API-Key` auth
+on every VISION route except `/health`, and the renderer's own
+`RestVisionApiAdapter` only sends that header when `VITE_MAT_API_KEY` is set in
+its own separate Vite-time environment — auto-loading `MAT_API_KEY` here alone
+(real bug found via live testing) silently locked the renderer out of its own
+backend. Excluded until both sides are wired together deliberately.
+
 **Ownership rule**: `owned` is only ever true once this app has confirmed *it*
 spawned the current process. It governs how `stop()` works (a real child-process
 handle + graceful `POST /control/stop` first, vs. a port-owner-PID lookup for an
