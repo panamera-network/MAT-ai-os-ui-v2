@@ -2,6 +2,7 @@ import type {
   AgentsResult,
   ControlActionResult,
   ControlStatusResult,
+  DocumentReadResult,
   EventsResult,
   GovernanceResult,
   Health,
@@ -53,6 +54,7 @@ export interface VisionApiAdapter {
 
   think(request: ThinkRequest, signal?: AbortSignal): Promise<ThinkResult>
   see(request: SeeRequest, signal?: AbortSignal): Promise<SeeResult>
+  readDocument(file: File, signal?: AbortSignal): Promise<DocumentReadResult>
   listen(request: ListenRequest, signal?: AbortSignal): Promise<ListenResult>
   speak(request: SpeakRequest, signal?: AbortSignal): Promise<SpeakResult>
   learn(request: LearnRequest, signal?: AbortSignal): Promise<LearnResult>

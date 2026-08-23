@@ -2,6 +2,7 @@ import type {
   AgentsResult,
   ControlActionResult,
   ControlStatusResult,
+  DocumentReadResult,
   EventsResult,
   GovernanceResult,
   Health,
@@ -136,6 +137,12 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
     // `multipart/form-data; boundary=...` from the FormData body itself;
     // setting it manually would break the boundary.
     return this.requestJson<SeeResult>('/see', { method: 'POST', body: form, signal: this.reasoningSignal(signal) })
+  }
+
+  readDocument(file: File, signal?: AbortSignal): Promise<DocumentReadResult> {
+    const form = new FormData()
+    form.set('file', file, file.name)
+    return this.requestJson<DocumentReadResult>('/read', { method: 'POST', body: form, signal: this.reasoningSignal(signal) })
   }
 
   listen(request: ListenRequest, signal?: AbortSignal): Promise<ListenResult> {

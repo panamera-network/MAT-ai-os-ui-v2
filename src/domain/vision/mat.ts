@@ -52,6 +52,17 @@ export interface SeeResult {
   response: string
 }
 
+/** `POST /read`'s own real fields, verbatim -- a document (PDF/TXT/MD/CSV)
+ * attachment, parsed server-side. No persistence, no `/learn` involvement:
+ * the caller (this app's own chat session state) holds `content` for as
+ * long as it wants it and no longer. */
+export interface DocumentReadResult {
+  filename: string
+  content: string
+  truncated: boolean
+  char_count: number
+}
+
 export interface ListenRequest {
   audio: Blob
   filename?: string

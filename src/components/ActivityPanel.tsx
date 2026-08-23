@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChatMessage } from '../hooks/useThink'
+import type { AttachedDocument, ChatMessage, DocumentAttachmentState } from '../hooks/useThink'
 import type { VoiceState } from '../hooks/useVoice'
 import './ActivityPanel.css'
 
@@ -17,6 +17,11 @@ interface ActivityPanelProps {
   onStopRecording: () => void
   speakingId: string | null
   onSpeak: (id: string, text: string) => void
+  document: AttachedDocument | null
+  documentState: DocumentAttachmentState
+  documentError: string | null
+  onAttachDocument: (file: File) => void
+  onRemoveDocument: () => void
 }
 
 /**
@@ -39,9 +44,17 @@ export function ActivityPanel({
   onStopRecording,
   speakingId,
   onSpeak,
+  document: attachedDocument,
+  documentState,
+  documentError,
+  onAttachDocument,
+  onRemoveDocument,
 }: ActivityPanelProps) {
   const [input, setInput] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
+  // Local, UI-only: /read's parsing state doesn't carry a filename until it
+  // succeeds, but the chip needs to show ONE the whole time it's parsing.
+  const [parsingFilename, setParsingFilename] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -49,7 +62,12 @@ export function ActivityPanel({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [messages, pending])
 
+  useEffect(() => {
+    if (documentState !== 'parsing') setParsingFilename(null)
+  }, [documentState])
+
   const busy = pending || voiceState === 'transcribing'
+  const documentReady = documentState === 'ready' && attachedDocument !== null
 
   const send = () => {
     if (pending || !online) return
@@ -73,12 +91,21 @@ export function ActivityPanel({
 
   const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null
-    // Belt-and-suspenders: `accept="image/*"` steers the OS picker, but a
-    // user can still override it there — /see is the only real upload
-    // contract and it's images-only, so a non-image selection is dropped
-    // rather than sent to a route that will reject it.
-    setAttachment(file && file.type.startsWith('image/') ? file : null)
     event.target.value = ''
+    if (!file) return
+    if (file.type.startsWith('image/')) {
+      // One attachment slot: picking an image replaces any attached document.
+      onRemoveDocument()
+      setAttachment(file)
+      return
+    }
+    // Not an image -- route to /read regardless of extension. A file this
+    // picker's own `accept` hint didn't anticipate still gets the real,
+    // honest server rejection (see documentError below) rather than a
+    // client-guessed "unsupported" message.
+    setAttachment(null)
+    setParsingFilename(file.name)
+    onAttachDocument(file)
   }
 
   const toggleMic = () => {
@@ -155,7 +182,7 @@ export function ActivityPanel({
         </div>
       </div>
 
-      {(attachment || voiceError) && (
+      {(attachment || documentState !== 'idle' || voiceError) && (
         <div className="activity-panel__status-row">
           {attachment && (
             <span className="activity-panel__chip">
@@ -165,19 +192,39 @@ export function ActivityPanel({
               </button>
             </span>
           )}
+          {documentState === 'parsing' && (
+            <span className="activity-panel__chip activity-panel__chip--pending">📄 {parsingFilename} — Parsing…</span>
+          )}
+          {documentReady && attachedDocument && (
+            <span className="activity-panel__chip">
+              📄 {attachedDocument.filename}
+              {attachedDocument.truncated && ' (truncated)'}
+              <button type="button" onClick={onRemoveDocument} aria-label="Remove document">
+                ×
+              </button>
+            </span>
+          )}
+          {documentState === 'error' && documentError && (
+            <span className="activity-panel__chip activity-panel__chip--error">
+              📄 {documentError}
+              <button type="button" onClick={onRemoveDocument} aria-label="Dismiss">
+                ×
+              </button>
+            </span>
+          )}
           {voiceError && <span className="activity-panel__voice-error">{voiceError}</span>}
         </div>
       )}
 
       <div className="activity-panel__command-row">
-        <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onFileChange} />
+        <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.md,.csv" hidden onChange={onFileChange} />
         <button
           type="button"
           className="activity-panel__attach"
           onClick={pickFile}
           disabled={!online || pending}
-          aria-label="Attach an image"
-          title="Attach an image (Vision)"
+          aria-label="Attach an image or document"
+          title="Attach an image (Vision) or a document (PDF/TXT/MD/CSV)"
         >
           📎
         </button>

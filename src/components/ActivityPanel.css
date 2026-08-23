@@ -272,6 +272,7 @@
 
 .activity-panel__status-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 0 13px;
@@ -288,6 +289,20 @@
   background: rgba(125, 230, 255, 0.06);
   color: var(--hud-text-muted);
   font-size: calc(9px + var(--hud-font-boost));
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.activity-panel__chip--pending {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(88, 54, 10, 0.1);
+  color: var(--hud-amber);
+}
+
+.activity-panel__chip--error {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(91, 21, 28, 0.12);
+  color: var(--hud-red);
 }
 
 .activity-panel__chip button {

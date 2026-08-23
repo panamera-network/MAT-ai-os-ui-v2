@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ActivityPanel } from './ActivityPanel'
-import type { ChatMessage } from '../hooks/useThink'
+import type { AttachedDocument, ChatMessage, DocumentAttachmentState } from '../hooks/useThink'
 import type { VoiceState } from '../hooks/useVoice'
 import './GlassChatPanel.css'
 
@@ -18,6 +18,11 @@ interface GlassChatPanelProps {
   onStopRecording: () => void
   speakingId: string | null
   onSpeak: (id: string, text: string) => void
+  document: AttachedDocument | null
+  documentState: DocumentAttachmentState
+  documentError: string | null
+  onAttachDocument: (file: File) => void
+  onRemoveDocument: () => void
 }
 
 /** Bottom-center chat, anchored to the bottom and expanding upward. */

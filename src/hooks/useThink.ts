@@ -3,6 +3,14 @@ import { useVisionApi } from '../app/VisionApiProvider'
 import { VisionApiError } from '../adapters/vision'
 import type { LearnResult } from '../domain/vision'
 
+export interface AttachedDocument {
+  filename: string
+  content: string
+  truncated: boolean
+}
+
+export type DocumentAttachmentState = 'idle' | 'parsing' | 'ready' | 'error'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'mat' | 'system'
@@ -31,11 +39,31 @@ interface UseThinkResult {
    * `/think` call's context (see `buildContext()`) — Learn is a distinct
    * action/result pair, not organic conversation. */
   sendLearn: (content: string) => Promise<void>
+  /** The currently-attached document (PDF/TXT/MD/CSV), if any — parsed via
+   * `POST /read` immediately on attach (never deferred to Send, unlike
+   * images), then folded into every subsequent `send()` call's `context`
+   * until removed or `reset()`. Session-scoped only: nothing here is ever
+   * persisted or passed to `/learn` automatically. */
+  document: AttachedDocument | null
+  documentState: DocumentAttachmentState
+  documentError: string | null
+  /** Parses `file` via `/read` and, on success, makes it part of this
+   * conversation's context from this point on. Replaces any previously
+   * attached document (one document attachment at a time, matching the
+   * existing single-image-attachment UI). Images are never valid here --
+   * the caller is expected to route those to `sendImage` instead; if one
+   * slips through, the real `/read` 415 becomes this attachment's error
+   * state, same honest-error handling as any other rejection. */
+  attachDocument: (file: File) => Promise<void>
+  /** Clears the attached document without touching conversation messages
+   * or MAT's own memory -- the inverse of `attachDocument`, not a `reset()`. */
+  removeDocument: () => void
   /** Clears visible messages (and therefore `buildContext()`'s bounded
-   * history, since it's derived live from `messages`) — session-only, never
-   * touches MAT's own long-term memory or calls any backend deletion. A
-   * skill `/learn` actually applied lives in MAT's own skill registry, not
-   * in this component's state, so it's untouched by this. */
+   * history, since it's derived live from `messages`) and any attached
+   * document — session-only, never touches MAT's own long-term memory or
+   * calls any backend deletion. A skill `/learn` actually applied lives in
+   * MAT's own skill registry, not in this component's state, so it's
+   * untouched by this. */
   reset: () => void
 }
 
@@ -63,6 +91,15 @@ function formatLearnResult(result: LearnResult): string {
 const MAX_CONTEXT_MESSAGES = 10
 const MAX_CONTEXT_CHARS = 4000
 
+/** Bounds how much of an attached document's already-extracted text (itself
+ * already capped server-side, see `/read`'s own MAX_EXTRACTED_CHARS) rides
+ * along in every subsequent `/think` call while it stays attached -- no
+ * chunking or relevant-section selection exists in the current architecture
+ * to pick a smaller, more targeted slice, so this is a flat cap: the
+ * document's own beginning, truncated, never a full 8000-char dump on every
+ * single turn regardless of what's actually being asked. */
+const MAX_DOCUMENT_CONTEXT_CHARS = 3000
+
 const CONTEXT_ROLE_LABEL: Record<'user' | 'mat', string> = { user: 'User', mat: 'MAT' }
 
 /** Plain-text transcript of recent turns, in the shape `Reasoning.
@@ -86,6 +123,17 @@ function buildContext(history: ChatMessage[]): string {
   return context
 }
 
+/** Plain-text block for an attached document, in the same "caller hands it
+ * in already assembled" shape `context` already uses -- truncated to
+ * `MAX_DOCUMENT_CONTEXT_CHARS` regardless of the server's own (larger)
+ * extraction cap, since this rides along on EVERY turn while attached, not
+ * just once. */
+function buildDocumentContext(document: AttachedDocument | null): string {
+  if (!document) return ''
+  const content = document.content.slice(0, MAX_DOCUMENT_CONTEXT_CHARS)
+  return `Attached document "${document.filename}":\n${content}`
+}
+
 /** Owns one `/think` conversation's state — message list, in-flight state,
  * and error-to-message translation. Kept separate from `ActivityPanel` so
  * that component stays purely presentational (data/callbacks in via props,
@@ -94,13 +142,19 @@ export function useThink(): UseThinkResult {
   const api = useVisionApi()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [pending, setPending] = useState(false)
+  const [document, setDocument] = useState<AttachedDocument | null>(null)
+  const [documentState, setDocumentState] = useState<DocumentAttachmentState>('idle')
+  const [documentError, setDocumentError] = useState<string | null>(null)
 
   const send = async (text: string) => {
     const trimmed = text.trim()
     if (!trimmed || pending) return
     // Built from history as of *before* this turn -- the new user message
-    // is never its own context.
-    const context = buildContext(messages)
+    // is never its own context. Document context (if any) comes first --
+    // background reference material, then the specific recent exchange.
+    const conversationContext = buildContext(messages)
+    const documentContext = buildDocumentContext(document)
+    const context = [documentContext, conversationContext].filter(Boolean).join('\n\n')
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: trimmed }])
     setPending(true)
     try {
@@ -134,7 +188,12 @@ export function useThink(): UseThinkResult {
   const sendLearn = async (content: string) => {
     const trimmed = content.trim()
     if (!trimmed || pending) return
-    const context = buildContext(messages)
+    // An attached document folds into `context` exactly like conversation
+    // history does -- Reasoning.compose_system_prompt()'s own "retrieved
+    // memory... caller hands it in already assembled" contract covers this
+    // honestly (LearnRequest.context is the SAME field /learn already
+    // accepts), never a second, invented "evidence" field.
+    const context = [buildDocumentContext(document), buildContext(messages)].filter(Boolean).join('\n\n')
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: `📚 Learn: ${trimmed}`, kind: 'learn' }])
     setPending(true)
     try {
@@ -149,10 +208,44 @@ export function useThink(): UseThinkResult {
     }
   }
 
+  const attachDocument = async (file: File) => {
+    setDocumentState('parsing')
+    setDocumentError(null)
+    try {
+      const result = await api.readDocument(file)
+      setDocument({ filename: result.filename, content: result.content, truncated: result.truncated })
+      setDocumentState('ready')
+    } catch (err) {
+      const detail = err instanceof VisionApiError ? err.detail : 'Could not read this file.'
+      setDocument(null)
+      setDocumentError(detail)
+      setDocumentState('error')
+    }
+  }
+
+  const removeDocument = () => {
+    setDocument(null)
+    setDocumentState('idle')
+    setDocumentError(null)
+  }
+
   const reset = () => {
     if (pending) return
     setMessages([])
+    removeDocument()
   }
 
-  return { messages, pending, send, sendImage, sendLearn, reset }
+  return {
+    messages,
+    pending,
+    send,
+    sendImage,
+    sendLearn,
+    document,
+    documentState,
+    documentError,
+    attachDocument,
+    removeDocument,
+    reset,
+  }
 }
