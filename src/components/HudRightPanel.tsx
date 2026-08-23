@@ -282,10 +282,13 @@ function PendingLearnRow({ suggestion, busy, lastResult, fetchDetail, onResolve 
 
   const result = lastResult?.suggestionId === suggestion.id ? lastResult : null
 
+  const isDeferred = suggestion.status === 'deferred'
+
   return (
-    <div className="hud-pending-learn-row">
+    <div className={`hud-pending-learn-row${isDeferred ? ' is-deferred' : ''}`}>
       <button type="button" className="hud-pending-learn-row__summary" onClick={toggle} aria-expanded={expanded}>
         <span className="hud-pending-learn-row__dot" aria-hidden="true" />
+        {isDeferred && <span className="hud-pending-learn-row__badge">Deferred</span>}
         <span className="hud-pending-learn-row__domain">{suggestion.domain ?? suggestion.operation}</span>
         <span className="hud-pending-learn-row__reason">{suggestion.reason}</span>
         <time>{formatSuggestionTime(suggestion.created_at)}</time>

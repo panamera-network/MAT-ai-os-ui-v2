@@ -95,9 +95,12 @@ export interface LearnResult {
 }
 
 /** One `LearnSuggestionManager` record's own real fields, trimmed for review
- * — a `new_domain` decision `/learn` left pending. */
+ * — a `new_domain` decision `/learn` left pending. `status` is `"pending"`
+ * (still within its active 15-minute window) or `"deferred"` (TTL elapsed —
+ * never discarded/auto-applied, still fully approvable/rejectable). */
 export interface LearnSuggestionSummary {
   id: string
+  status: 'pending' | 'deferred'
   operation: string
   target_skill_id: string | null
   domain: string | null
