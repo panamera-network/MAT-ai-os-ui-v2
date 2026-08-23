@@ -265,6 +265,74 @@ special-case reasoning to preserve here: there's no host process to keep alive
 independent of anything, so stopping the poll loop on close is simply correct,
 not a deliberate exception.
 
+## Qdrant preflight (`electron/main/qdrant/`)
+
+"Launcher starts -> ensure Qdrant -> start/attach MAT -> UI live." Qdrant is
+external infrastructure MAT-AI-OS-V2 already tolerates going missing (its own
+documented degraded-memory mode, restored in a prior task) — this preflight
+exists only to give that mode a fair chance not to be needed, by trying to
+have a local Qdrant up before MAT itself starts, never to make Qdrant a hard
+requirement.
+
+```
+electron/main/qdrant/
+├── config.ts    — resolves the qdrant executable path (env -> bundled ->
+│                  known dev location), host/port
+└── preflight.ts — QdrantPreflight: a one-shot check-then-maybe-spawn,
+                   never a supervisor
+```
+
+**Path resolution** (`config.ts`), same "first candidate that actually
+exists wins" shape as `runtime/config.ts`'s own `RuntimeConfig`:
+1. `QDRANT_RUNTIME_PATH` env var — always wins outright, even if invalid.
+2. `<process.resourcesPath>/qdrant/qdrant(.exe)` — a packaged build's bundled
+   binary, once electron-builder's `extraResources` actually places one
+   there (resolution order only, not the packaging step itself).
+3. `D:\qdrant\qdrant.exe` — this machine's known local dev install, tried
+   only when not packaged and only on Windows. Never the only production
+   strategy — a packaged build with no bundled binary and no env override
+   simply finds nothing, same honest `unresolved` shape `RuntimeConfig` uses.
+
+**`ensure()`** (called once, before `runtime.initialize()`, and safe to call
+again e.g. on a macOS `activate` reopen without spawning a duplicate): probe
+`host:port` (default `127.0.0.1:6333`, matching `mat_core_lib`'s own
+`QDRANT_HOST`/`QDRANT_PORT` env var names/defaults) — reachable means
+*attach* (`owned: false`, never spawns a second instance). Not reachable and
+no executable resolved, or the spawn itself fails, or it never binds the
+port within a bounded window (20s) — all three degrade to an honest
+`offline` status with a real reason, and `ensure()` still returns normally.
+**It never throws, never blocks MAT startup, and never retries** — a failure
+here just means `runtime.initialize()` runs next exactly as if this preflight
+didn't exist, and MAT's own existing degraded-memory tolerance takes it from
+there.
+
+**Ownership and quit behavior**: identical philosophy to `RuntimeSupervisor` —
+`owned` is only ever true once this app has confirmed *it* spawned the
+current Qdrant process (`spawn(..., cwd: <qdrant's own directory>,
+detached: true)`, `child.unref()`, same Windows Job Object reasoning as
+MAT's own spawn). There is no stop/restart path for Qdrant anywhere in this
+module — closing the UI never stops Qdrant, owned or not, and an externally
+-owned instance is never touched. Verified live: killing this app's own
+Electron process (not the whole tree) leaves a self-started Qdrant running;
+reopening attaches to it without spawning a second one.
+
+**IPC**: `mat:qdrant:getStatus` (invoke/handle) + `mat:qdrant:statusChanged`
+(push), both in `contract.ts`'s `QdrantStatus` type
+(`checking`/`starting`/`online`/`offline`, `owned`, `message`, `since`) —
+read-only, no start/stop/restart handler exists for it at all.
+`src/domain`/HUD are untouched: the Memory panel's Qdrant row already reads
+`/memory`'s own `health.qdrant` (MAT's own live probe) as its authoritative
+source, which is a different fact from "did *this app* find or start a local
+Qdrant" — this status exists for the renderer to consume later if needed,
+without redesigning anything today.
+
+**A real bug this task's own live testing found and fixed**: a genuinely
+healthy MAT took ~84s to answer `/health` on a cold start (Qdrant recovering
+several pre-existing collections, plus MAT's own real sentence-transformers/
+torch embedder load) — comfortably starving `RuntimeSupervisor`'s previous
+45s `START_TIMEOUT_MS` and reporting a false `unreachable` on a MAT that was
+actually fine. Bumped to 120s, with real measured margin, not a guess.
+
 ## Development and production flow
 
 Both flows go through `vite-plugin-electron/simple`, configured in `vite.config.ts`,

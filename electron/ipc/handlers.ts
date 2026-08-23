@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS, type PingResponse, type RuntimeStatus, type TelemetrySnapshot } from './contract'
+import { IPC_CHANNELS, type PingResponse, type QdrantStatus, type RuntimeStatus, type TelemetrySnapshot } from './contract'
 import type { RuntimeSupervisor } from '../main/runtime/supervisor'
 import type { TelemetryService } from '../main/telemetry/service'
+import type { QdrantPreflight } from '../main/qdrant/preflight'
 
 /**
  * Registers exactly one `ipcMain.handle` per allowlisted channel in
@@ -18,7 +19,7 @@ import type { TelemetryService } from '../main/telemetry/service'
  * on top of that — there is no `ipcMain.handle` that can change anything
  * about the host machine, only report on it.
  */
-export function registerIpcHandlers(runtime: RuntimeSupervisor, telemetry: TelemetryService): void {
+export function registerIpcHandlers(runtime: RuntimeSupervisor, telemetry: TelemetryService, qdrant: QdrantPreflight): void {
   ipcMain.handle(IPC_CHANNELS.ping, (): PingResponse => ({
     ok: true,
     pong: 'pong',
@@ -31,4 +32,8 @@ export function registerIpcHandlers(runtime: RuntimeSupervisor, telemetry: Telem
   ipcMain.handle(IPC_CHANNELS.runtimeRestart, (): Promise<RuntimeStatus> => runtime.restart())
 
   ipcMain.handle(IPC_CHANNELS.telemetryGetSnapshot, (): TelemetrySnapshot | null => telemetry.getSnapshot())
+
+  // Read-only, same as telemetry — no start/stop/restart handler exists for
+  // Qdrant at all (see QdrantStatus's own doc comment for why).
+  ipcMain.handle(IPC_CHANNELS.qdrantGetStatus, (): QdrantStatus => qdrant.getStatus())
 }

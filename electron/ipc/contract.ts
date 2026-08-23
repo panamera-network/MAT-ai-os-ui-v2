@@ -23,6 +23,9 @@ export const IPC_CHANNELS = {
   telemetryGetSnapshot: 'mat:telemetry:getSnapshot',
   /** Push-only, same rule as `runtimeStatusChanged`. */
   telemetrySnapshotChanged: 'mat:telemetry:snapshotChanged',
+  qdrantGetStatus: 'mat:qdrant:getStatus',
+  /** Push-only, same rule as `runtimeStatusChanged`. */
+  qdrantStatusChanged: 'mat:qdrant:statusChanged',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -53,6 +56,30 @@ export interface RuntimeStatus {
   owned: boolean
   pid: number | null
   /** Short, human-readable — what the "Operator / Status" field shows. */
+  message: string
+  /** `Date.now()` when this state was entered. */
+  since: number
+}
+
+/**
+ * Qdrant preflight state — a one-shot "make sure it's up before MAT starts"
+ * check, never a supervisor: no restart, no stop, no watchdog (MAT-AI-OS-V2
+ * already tolerates a missing Qdrant via its own documented degraded-memory
+ * mode; this only exists to give that a fair chance not to be needed).
+ * Distinct from `/memory`'s own `health.qdrant` field (MAT's own live probe,
+ * the Memory panel's authoritative source) — this is "did *this app* find
+ * or start a local Qdrant", which is why `owned` exists here at all.
+ */
+export type QdrantState = 'checking' | 'starting' | 'online' | 'offline'
+
+export interface QdrantStatus {
+  state: QdrantState
+  /** True only once this app has confirmed it spawned the current Qdrant
+   * process itself — an already-running instance is attached to, never
+   * claimed, and never stopped by this app either way (task: "Closing the
+   * UI must not automatically stop Qdrant" / "Do not kill an externally
+   * -owned Qdrant" — there is no stop path here for either case). */
+  owned: boolean
   message: string
   /** `Date.now()` when this state was entered. */
   since: number
@@ -97,5 +124,12 @@ export interface MatBridgeApi {
     /** Subscribes to every new reading (~every 1.5s); returns an
      * unsubscribe function. Same one-fixed-channel rule as `onStatusChanged`. */
     onSnapshotChanged: (listener: (snapshot: TelemetrySnapshot) => void) => () => void
+  }
+  qdrant: {
+    getStatus: () => Promise<QdrantStatus>
+    /** Subscribes to every preflight state transition (checking -> starting
+     * -> online/offline); returns an unsubscribe function. No start/stop/
+     * restart here — see `QdrantStatus`'s own doc comment for why. */
+    onStatusChanged: (listener: (status: QdrantStatus) => void) => () => void
   }
 }

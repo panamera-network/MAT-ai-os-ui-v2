@@ -9,7 +9,14 @@ import { logRuntimeLine } from './log'
 
 const HEALTH_TIMEOUT_MS = 3000
 const START_POLL_INTERVAL_MS = 1000
-const START_TIMEOUT_MS = 45000
+// Real bug found via this task's own live cold-start test: a genuinely
+// healthy MAT took ~84s to answer /health for the first time (a cold Qdrant
+// recovering several pre-existing collections, plus MAT's own real
+// sentence-transformers/torch embedder load) -- comfortably starving the
+// previous 45s budget and reporting a false "unreachable" on a MAT that was
+// actually fine, just slower to start than this constant assumed. Bumped
+// with real margin above the measured figure, not a guess.
+const START_TIMEOUT_MS = 120000
 const WATCHDOG_INTERVAL_MS = 10000
 const WATCHDOG_FAILURE_THRESHOLD = 2
 const MAX_AUTO_RESTARTS = 3

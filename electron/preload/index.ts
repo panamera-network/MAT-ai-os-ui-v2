@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type MatBridgeApi, type PingResponse, type RuntimeStatus, type TelemetrySnapshot } from '../ipc/contract'
+import { IPC_CHANNELS, type MatBridgeApi, type PingResponse, type QdrantStatus, type RuntimeStatus, type TelemetrySnapshot } from '../ipc/contract'
 
 /**
  * The ONLY place `ipcRenderer` is ever touched. `contextIsolation: true` +
@@ -28,6 +28,14 @@ const matBridge: MatBridgeApi = {
       const wrapped = (_event: Electron.IpcRendererEvent, snapshot: TelemetrySnapshot) => listener(snapshot)
       ipcRenderer.on(IPC_CHANNELS.telemetrySnapshotChanged, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.telemetrySnapshotChanged, wrapped)
+    },
+  },
+  qdrant: {
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.qdrantGetStatus) as Promise<QdrantStatus>,
+    onStatusChanged: (listener: (status: QdrantStatus) => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, status: QdrantStatus) => listener(status)
+      ipcRenderer.on(IPC_CHANNELS.qdrantStatusChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.qdrantStatusChanged, wrapped)
     },
   },
 }
