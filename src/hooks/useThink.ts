@@ -12,6 +12,17 @@ interface UseThinkResult {
   messages: ChatMessage[]
   pending: boolean
   send: (text: string) => Promise<void>
+  /** `/see` — the only existing upload/vision contract (images only, no
+   * generic file-processing route exists). Shares `pending`/`messages` with
+   * `send()` so an image turn can't overlap a think turn and both render in
+   * one conversation. Never carries `context` — `SeeRequest` has no such
+   * field; `/see` is a separate capability from `/think`, not a context-aware
+   * chat turn. */
+  sendImage: (prompt: string, images: File[]) => Promise<void>
+  /** Clears visible messages (and therefore `buildContext()`'s bounded
+   * history, since it's derived live from `messages`) — session-only, never
+   * touches MAT's own long-term memory or calls any backend deletion. */
+  reset: () => void
 }
 
 /** Real bug found via live testing: every `/think` call sent only `{ text }`
@@ -74,5 +85,27 @@ export function useThink(): UseThinkResult {
     }
   }
 
-  return { messages, pending, send }
+  const sendImage = async (prompt: string, images: File[]) => {
+    if (images.length === 0 || pending) return
+    const trimmedPrompt = prompt.trim() || 'Describe this image.'
+    const label = images.length === 1 ? images[0].name : `${images.length} images`
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: `📎 ${label} — ${trimmedPrompt}` }])
+    setPending(true)
+    try {
+      const result = await api.see({ prompt: trimmedPrompt, images })
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'mat', text: result.response }])
+    } catch (err) {
+      const detail = err instanceof VisionApiError ? err.detail : 'Something went wrong.'
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'system', text: detail }])
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const reset = () => {
+    if (pending) return
+    setMessages([])
+  }
+
+  return { messages, pending, send, sendImage, reset }
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ActivityPanel } from './ActivityPanel'
 import type { ChatMessage } from '../hooks/useThink'
+import type { VoiceState } from '../hooks/useVoice'
 import './GlassChatPanel.css'
 
 interface GlassChatPanelProps {
@@ -8,10 +9,18 @@ interface GlassChatPanelProps {
   messages: ChatMessage[]
   pending: boolean
   onSend: (text: string) => void
+  onSendImage: (prompt: string, images: File[]) => void
+  onReset: () => void
+  voiceState: VoiceState
+  voiceError: string | null
+  onStartRecording: () => void
+  onStopRecording: () => void
+  speakingId: string | null
+  onSpeak: (id: string, text: string) => void
 }
 
 /** Bottom-center chat, anchored to the bottom and expanding upward. */
-export function GlassChatPanel({ online, messages, pending, onSend }: GlassChatPanelProps) {
+export function GlassChatPanel(props: GlassChatPanelProps) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -28,7 +37,7 @@ export function GlassChatPanel({ online, messages, pending, onSend }: GlassChatP
         {expanded ? '▾' : '▴'}
       </button>
       <div className={`glass-chat-panel__body${expanded ? ' is-expanded' : ''}`}>
-        <ActivityPanel online={online} messages={messages} pending={pending} onSend={onSend} />
+        <ActivityPanel {...props} />
       </div>
     </div>
   )

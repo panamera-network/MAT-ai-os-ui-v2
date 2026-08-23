@@ -9,6 +9,8 @@ import { HudRightPanel } from '../components/HudRightPanel'
 import { GlassChatPanel } from '../components/GlassChatPanel'
 import { useHealth } from '../hooks/useHealth'
 import { useThink } from '../hooks/useThink'
+import { useVoice } from '../hooks/useVoice'
+import { useSpeak } from '../hooks/useSpeak'
 import type { HudEvent, HudEventTone } from '../components/hudEvents'
 
 /**
@@ -29,7 +31,9 @@ import type { HudEvent, HudEventTone } from '../components/hudEvents'
 export function HomeScreen() {
   const [view, setView] = useState<ActiveCanvasView>('presence')
   const { connection, health } = useHealth()
-  const { messages, pending, send } = useThink()
+  const { messages, pending, send, sendImage, reset } = useThink()
+  const { voiceState, voiceError, startRecording, stopRecording } = useVoice(send)
+  const { speakingId, speak } = useSpeak()
   const [hudEvents, setHudEvents] = useState<HudEvent[]>([])
   const eventSequence = useRef(0)
 
@@ -63,6 +67,14 @@ export function HomeScreen() {
           messages={messages}
           pending={pending}
           onSend={send}
+          onSendImage={sendImage}
+          onReset={reset}
+          voiceState={voiceState}
+          voiceError={voiceError}
+          onStartRecording={startRecording}
+          onStopRecording={stopRecording}
+          speakingId={speakingId}
+          onSpeak={speak}
         />
       }
     >
