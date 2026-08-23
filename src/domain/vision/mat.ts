@@ -18,11 +18,15 @@ export interface Health {
     voice: boolean
   }
   /** Best-effort config *presence* checks only — never a live provider call,
-   * never "confirmed reachable". */
+   * never "confirmed reachable". `vision_configured` mirrors this exactly:
+   * true the moment any real VISION candidate (primary/fallback_cloud/...)
+   * has its credential env var present, never proof `/see` will actually
+   * succeed. */
   degraded: {
     llm_provider_configured: boolean
     stt_configured: boolean
     tts_configured: boolean
+    vision_configured: boolean
   }
   body: BodyStatus
 }
