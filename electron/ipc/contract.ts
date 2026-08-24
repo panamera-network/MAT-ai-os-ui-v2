@@ -43,8 +43,19 @@ export interface PingResponse {
  * this is "what is the launcher itself doing/did it succeed", which is why
  * `attaching` (found already running, didn't spawn it) and `starting`
  * (spawn in flight, not yet healthy) exist as separate states from `ready`.
+ *
+ * `degraded` (Group 7C — Access + Escalation): the watchdog's own periodic
+ * poll (`watchdogTick`, `WATCHDOG_INTERVAL_MS`) reads `/health`'s real JSON
+ * body, not just its HTTP status — previously a body that answered `200 OK`
+ * but had a `V2Body`-internal component reported degraded (`body.degraded`
+ * non-empty) was completely invisible here: `checkHealth()` only ever
+ * checked `response.ok`. Detect-only, same conservative stance the
+ * `unreachable` case already takes for a live-but-unresponsive process — no
+ * auto-restart, since a degraded (not dead) MAT might still recover, or
+ * restarting might not fix whatever's actually wrong. Reverts to `ready`
+ * once a later poll finds `body.degraded` empty again.
  */
-export type RuntimeState = 'checking' | 'attaching' | 'starting' | 'ready' | 'restarting' | 'stopping' | 'stopped' | 'unreachable' | 'error'
+export type RuntimeState = 'checking' | 'attaching' | 'starting' | 'ready' | 'degraded' | 'restarting' | 'stopping' | 'stopped' | 'unreachable' | 'error'
 
 export interface RuntimeStatus {
   state: RuntimeState

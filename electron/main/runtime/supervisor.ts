@@ -74,7 +74,7 @@ export class RuntimeSupervisor extends EventEmitter {
     const alreadyListening = await probePort(this.config.host, this.config.port)
     if (alreadyListening) {
       this.setStatus('attaching', false, null, 'MAT already running — attaching…')
-      const healthy = await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)
+      const healthy = (await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)).reachable
       if (healthy) {
         this.setStatus('ready', false, null, 'Attached to an already-running MAT.')
         this.startWatchdog()
@@ -97,7 +97,7 @@ export class RuntimeSupervisor extends EventEmitter {
       const stillListening = await probePort(this.config.host, this.config.port)
       if (stillListening) {
         this.setStatus('attaching', false, null, 'MAT already running — attaching…')
-        const healthy = await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)
+        const healthy = (await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)).reachable
         this.setStatus(
           healthy ? 'ready' : 'unreachable',
           false,
@@ -303,7 +303,7 @@ export class RuntimeSupervisor extends EventEmitter {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
       if (this.childExited) return false
-      if (await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)) return true
+      if ((await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)).reachable) return true
       await delay(START_POLL_INTERVAL_MS)
     }
     return false
@@ -322,26 +322,48 @@ export class RuntimeSupervisor extends EventEmitter {
     }
   }
 
-  /** Only ever handles "still alive, just not answering `/health`" —
-   * process death is handled immediately by the `exit` listener in
-   * `start()` (see `handleUnexpectedExit`), which fires the instant Node
-   * reports the child gone rather than waiting for this to notice
-   * indirectly. Deliberately no auto-restart here: a live-but-unresponsive
-   * process (ours or attached) might still recover, or might not be safe to
-   * touch — this just reports `unreachable` and leaves the decision to the
-   * user (Restart). */
+  /** Handles two distinct cases, both detect-only (never auto-restart):
+   *
+   * "still alive, just not answering `/health`" — process death is handled
+   * immediately by the `exit` listener in `start()` (see
+   * `handleUnexpectedExit`), which fires the instant Node reports the child
+   * gone rather than waiting for this to notice indirectly. A live-but-
+   * unresponsive process (ours or attached) might still recover, or might
+   * not be safe to touch — this just reports `unreachable` and leaves the
+   * decision to the user (Restart).
+   *
+   * "answering `200 OK`, but `V2Body`-internal state is degraded" (Group
+   * 7C — Access + Escalation): previously a completely invisible blind spot
+   * here — `checkHealth()` only ever looked at the HTTP status, never the
+   * JSON body's own `body.degraded` array, so a MAT that was technically
+   * "reachable" but had a real internal component failure sat reported as
+   * plain `ready` forever. Same conservative stance as the unresponsive
+   * case: detect and surface a distinct `degraded` state, never restart on
+   * its own — degraded isn't dead, and restarting might not even fix
+   * whatever's actually wrong. Reverts to `ready` once a later poll finds
+   * `body.degraded` empty again. */
   private async watchdogTick(): Promise<void> {
-    if (this.status.state !== 'ready' || this.busy) return
-    const healthy = await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)
-    if (healthy) {
-      this.consecutiveFailures = 0
+    if ((this.status.state !== 'ready' && this.status.state !== 'degraded') || this.busy) return
+    const result = await checkHealth(this.config.baseUrl, HEALTH_TIMEOUT_MS)
+
+    if (!result.reachable) {
+      this.consecutiveFailures += 1
+      if (this.consecutiveFailures < WATCHDOG_FAILURE_THRESHOLD) return
+      this.stopWatchdog()
+      this.setStatus('unreachable', this.status.owned, this.status.pid, 'Lost contact with MAT.')
       return
     }
-    this.consecutiveFailures += 1
-    if (this.consecutiveFailures < WATCHDOG_FAILURE_THRESHOLD) return
 
-    this.stopWatchdog()
-    this.setStatus('unreachable', this.status.owned, this.status.pid, 'Lost contact with MAT.')
+    this.consecutiveFailures = 0
+    const isDegraded = result.degraded.length > 0
+    if (isDegraded && this.status.state !== 'degraded') {
+      this.setStatus(
+        'degraded', this.status.owned, this.status.pid,
+        `MAT is running but degraded: ${result.degraded.join(', ')}.`,
+      )
+    } else if (!isDegraded && this.status.state === 'degraded') {
+      this.setStatus('ready', this.status.owned, this.status.pid, 'MAT is running.')
+    }
   }
 
   private makeStatus(state: RuntimeState, owned: boolean, pid: number | null, message: string): RuntimeStatus {
