@@ -141,6 +141,11 @@ export class RuntimeSupervisor extends EventEmitter {
           ...process.env,
           MAT_HOST: process.env.MAT_HOST ?? this.config.host,
           MAT_PORT: process.env.MAT_PORT ?? String(this.config.port),
+          // Group 8: real per-user data dir, not a cwd-relative default that
+          // would land inside a packaged install's own (non-writable,
+          // reinstall-unsafe) resources tree -- see RuntimeConfig.dataDir's
+          // own docstring for the full story.
+          MAT_DATA_DIR: process.env.MAT_DATA_DIR ?? this.config.dataDir,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,

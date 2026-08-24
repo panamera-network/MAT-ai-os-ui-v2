@@ -2,6 +2,10 @@ node_modules
 dist
 dist-electron
 release
+# Group 8: fetched at build time by scripts/fetch-qdrant.mjs, never committed
+# (a ~80MB third-party binary has no business in source control) -- see that
+# script's own docstring.
+resources/qdrant
 coverage
 *.local
 *.log

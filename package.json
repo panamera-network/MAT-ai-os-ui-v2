@@ -15,7 +15,8 @@
     "typecheck": "tsc -p tsconfig.app.json --pretty false && tsc -p tsconfig.electron.json --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist:electron": "electron-builder"
+    "fetch:qdrant": "node scripts/fetch-qdrant.mjs",
+    "dist:electron": "npm run fetch:qdrant && electron-builder"
   },
   "dependencies": {
     "@mat-ai-os/brain-view": "link:../MAT-AI-BrainView",
@@ -53,6 +54,12 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/qdrant",
+        "to": "qdrant"
+      }
     ],
     "directories": {
       "output": "release"

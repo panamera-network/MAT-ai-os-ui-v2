@@ -28,6 +28,22 @@ export interface RuntimeConfig {
   baseUrl: string
   host: string
   port: number
+  /** Group 8 (Packaging + Release Gate): where MAT's own state lives —
+   * `mat_laws.json`, `principals.json`, learned skills, backups, memory
+   * idempotent locks, everything `ops/config.py`'s `MAT_DATA_DIR` controls.
+   * Real bug found during packaging audit: this app previously never set
+   * `MAT_DATA_DIR` at all, so the backend fell back to its own default (a
+   * plain relative `"data"` path, resolved against `cwd` — which
+   * `supervisor.ts` sets to `repoPath`). For a source checkout that's
+   * merely untidy; for a packaged install where `repoPath` resolves under
+   * `<resourcesPath>` (see `resolveRuntimePath`'s `'bundled'` case), that
+   * directory is the app's own install/resources tree — not guaranteed
+   * writable by a non-admin user, and destroyed wholesale by every
+   * uninstall or update. `app.getPath('userData')` is the same per-user,
+   * writable, update-safe location `log.ts` already uses for this app's
+   * own logs — MAT's data now lives there too, under its own `data`
+   * subfolder so it never collides with Electron's own userData contents. */
+  dataDir: string
 }
 
 function resolveBaseUrl(): string {
@@ -83,5 +99,6 @@ export function loadRuntimeConfig(): RuntimeConfig {
     baseUrl,
     host: url.hostname,
     port: Number(url.port || '80'),
+    dataDir: path.join(app.getPath('userData'), 'data'),
   }
 }

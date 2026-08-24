@@ -163,6 +163,25 @@ Resolving to nothing (packaged, no env var, no bundled runtime found) leaves
 or guessing a path. *Attaching* to an already-running instance still works in this
 state, since that path only needs `host`/`port`/`baseUrl`, never a resolved repo.
 
+**(Group 8, Packaging + Release Gate) — unlike Qdrant above, the Python runtime
+bundling step (populating `<resourcesPath>/MAT-AI-OS-V2` with a working venv +
+~106 installed packages, ~1.1GB, dominated by `torch`/`sentence-transformers`)
+remains a genuine, unaddressed BLOCKER for shipping a packaged installer** — there
+is no PyInstaller/Nuitka/embeddable-Python spec or equivalent anywhere in either
+repo, and freezing that dependency tree is realistically multi-day work, not a
+same-pass fix like Qdrant's single self-contained binary was. Until that exists,
+a packaged build only works via `MAT_RUNTIME_PATH` pointed at a real, already-
+provisioned MAT-AI-OS-V2 checkout+venv on the end user's machine — not yet a
+true "install and go" experience for the Python side.
+
+`RuntimeConfig.dataDir` (Group 8) is `app.getPath('userData')/data`, passed to
+the spawned `python -m ops` child as `MAT_DATA_DIR` (`supervisor.ts`) — real bug
+fix: this was never set before, so the backend's own `data_dir` default (a
+plain relative `"data"`, resolved against `cwd` = `repoPath`) would have landed
+inside a packaged install's own resources tree once bundling ships — not
+guaranteed writable, and wiped by every reinstall/update. Now it's per-user and
+update-safe, same location `log.ts` already used for this app's own logs.
+
 `main/index.ts` constructs one `RuntimeSupervisor`, calls `initialize()` once at
 startup, and forwards every `'status'` event it emits to the renderer over
 `mat:runtime:statusChanged`. Five IPC channels, all in `contract.ts`:
@@ -302,8 +321,16 @@ electron/main/qdrant/
 exists wins" shape as `runtime/config.ts`'s own `RuntimeConfig`:
 1. `QDRANT_RUNTIME_PATH` env var — always wins outright, even if invalid.
 2. `<process.resourcesPath>/qdrant/qdrant(.exe)` — a packaged build's bundled
-   binary, once electron-builder's `extraResources` actually places one
-   there (resolution order only, not the packaging step itself).
+   binary. **(Group 8, Packaging + Release Gate) — this is now real, not just
+   a resolution stub:** `scripts/fetch-qdrant.mjs` downloads one pinned Qdrant
+   release's Windows binary (`qdrant-x86_64-pc-windows-msvc.zip` from Qdrant's
+   own GitHub releases) into `resources/qdrant/qdrant.exe`, and `package.json`'s
+   `build.extraResources` bundles that folder into every packaged build at
+   exactly this path. `npm run dist:electron` runs the fetch automatically
+   (`predist` step); `npm run fetch:qdrant` runs it standalone. The downloaded
+   binary itself is gitignored (`resources/qdrant`) — a ~80MB third-party
+   binary has no business living in source control; every build fetches (or,
+   after the first run, idempotently reuses) the pinned version fresh.
 3. `D:\qdrant\qdrant.exe` — this machine's known local dev install, tried
    only when not packaged and only on Windows. Never the only production
    strategy — a packaged build with no bundled binary and no env override
