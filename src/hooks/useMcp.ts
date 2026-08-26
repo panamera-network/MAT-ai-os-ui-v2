@@ -1,10 +1,11 @@
 import type { VisionApiAdapter } from '../adapters/vision'
 import type { McpResult } from '../domain/vision'
-import { useVisionResource } from './useVisionResource'
+import { LEFT_PANEL_POLL_MS, useVisionResource } from './useVisionResource'
 
 const fetchMcp = (api: VisionApiAdapter, signal: AbortSignal) => api.getMcp(signal)
 
-/** Real `GET /mcp` snapshot for the Glass HUD's left info zone. */
+/** Real `GET /mcp` snapshot for the Glass HUD's left info zone — polled
+ * (Batch A) so the card reflects live state, not a one-shot load. */
 export function useMcp() {
-  return useVisionResource<McpResult>(fetchMcp)
+  return useVisionResource<McpResult>(fetchMcp, { pollMs: LEFT_PANEL_POLL_MS })
 }

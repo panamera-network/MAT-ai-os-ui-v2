@@ -1,5 +1,6 @@
 import type {
   AgentsResult,
+  BudgetResult,
   ControlActionResult,
   ControlStatusResult,
   DocumentReadResult,
@@ -8,6 +9,7 @@ import type {
   Health,
   IdentityResult,
   KillResult,
+  KnowledgeResult,
   LearnRequest,
   LearnResult,
   LearnSuggestionDetail,
@@ -28,6 +30,7 @@ import type {
   ServicesResult,
   ServiceStatus,
   SkillsResult,
+  SkillVersionsResult,
   SoulResult,
   SpeakRequest,
   SpeakResult,
@@ -258,6 +261,15 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
     return this.requestJson<SkillsResult>('/skills', { signal })
   }
 
+  getSkillVersions(skillId: string, signal?: AbortSignal): Promise<SkillVersionsResult> {
+    return this.requestJson<SkillVersionsResult>(`/skills/${encodeURIComponent(skillId)}/versions`, { signal })
+  }
+
+  getKnowledge(domain?: string, signal?: AbortSignal): Promise<KnowledgeResult> {
+    const query = domain ? `?domain=${encodeURIComponent(domain)}` : ''
+    return this.requestJson<KnowledgeResult>(`/knowledge${query}`, { signal })
+  }
+
   // ------------------------------------------------------------------
   // Models — MAT's own registry, a fixed matrix, never a discovery catalog
   // ------------------------------------------------------------------
@@ -268,6 +280,15 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
 
   selectModel(request: ModelSelectRequest, signal?: AbortSignal): Promise<ModelsResult> {
     return this.requestJson<ModelsResult>('/models/select', { ...this.jsonInit(request), signal })
+  }
+
+  // ------------------------------------------------------------------
+  // Budget — V2Body's own intelligence-layer telemetry, never Models'
+  // registry control path (see BudgetResult's own comment)
+  // ------------------------------------------------------------------
+
+  getBudget(signal?: AbortSignal): Promise<BudgetResult> {
+    return this.requestJson<BudgetResult>('/budget', { signal })
   }
 
   // ------------------------------------------------------------------

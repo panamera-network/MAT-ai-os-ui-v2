@@ -19,4 +19,9 @@ export interface Loop {
   created_at: string
 }
 
-export type LoopsResult = BodyScoped<{ loops: Loop[] }>
+export type LoopsResult = BodyScoped<{
+  loops: Loop[]
+  /** Batch B telemetry — real, persisted day-bucketed counts (KL calendar
+   * day), both 0 if no loop has fired yet today. */
+  today: { completed: number; failed: number }
+}>

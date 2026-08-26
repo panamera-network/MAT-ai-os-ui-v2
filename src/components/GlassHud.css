@@ -81,6 +81,24 @@
   bottom: 18px;
   transform: translateX(-50%);
   pointer-events: auto;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Batch A: "minimize", not unmount -- chat keeps its own scroll/expanded
+   state intact underneath, it's just visually de-emphasized while a card
+   detail overlay is open. Closing the overlay restores this exactly. */
+.glass-hud__chat.is-minimized {
+  transform: translateX(-50%) scale(0.92) translateY(10px);
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.glass-hud__detail {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
 }
 
 @media (max-width: 1050px) {

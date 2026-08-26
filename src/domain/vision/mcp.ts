@@ -31,4 +31,20 @@ export interface McpApproval {
   granting_skills_requested: boolean
 }
 
-export type McpResult = BodyScoped<{ servers: McpServer[]; pending_approvals: McpApproval[] }>
+/** Batch B telemetry (`MCPManager.get_activity()`) — real per-server call
+ * outcomes only, never a push-based health check (this backend has none).
+ * In-memory, resets on restart. */
+export interface McpActivity {
+  last_success_at: string | null
+  last_failure_at: string | null
+  success_count: number
+  failure_count: number
+}
+
+export type McpResult = BodyScoped<{
+  servers: McpServer[]
+  pending_approvals: McpApproval[]
+  /** Keyed by server name — a server with no recorded activity yet is
+   * simply absent, never a fabricated zeroed entry. */
+  activity: Record<string, McpActivity>
+}>

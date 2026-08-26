@@ -6,6 +6,13 @@ interface GlassHudProps {
   left?: ReactNode
   right?: ReactNode
   centerChat?: ReactNode
+  /** Batch A: a card's lightweight frosted detail overlay, rendered in the
+   * SAME deliberately-empty center cell `centerChat` already floats over —
+   * never a new zone, never a new page. `chatMinimized` visually de-
+   * emphasizes (not unmounts) `centerChat` while this is present, so
+   * closing the detail restores the exact same chat state it had before. */
+  centerDetail?: ReactNode
+  chatMinimized?: boolean
 }
 
 /**
@@ -16,13 +23,14 @@ interface GlassHudProps {
  * showing (Presence, Brain View, ...) stays fully visible and unobstructed
  * behind the HUD.
  */
-export function GlassHud({ header, left, right, centerChat }: GlassHudProps) {
+export function GlassHud({ header, left, right, centerChat, centerDetail, chatMinimized }: GlassHudProps) {
   return (
     <div className="glass-hud">
       <div className="glass-hud__header">{header}</div>
       {left && <div className="glass-hud__left">{left}</div>}
       {right && <div className="glass-hud__right">{right}</div>}
-      {centerChat && <div className="glass-hud__chat">{centerChat}</div>}
+      {centerChat && <div className={`glass-hud__chat${chatMinimized ? ' is-minimized' : ''}`}>{centerChat}</div>}
+      {centerDetail && <div className="glass-hud__detail">{centerDetail}</div>}
     </div>
   )
 }

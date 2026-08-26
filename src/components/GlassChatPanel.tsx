@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ActivityPanel } from './ActivityPanel'
-import type { AttachedDocument, ChatMessage, DocumentAttachmentState } from '../hooks/useThink'
+import type { AttachedDocument, ChatMessage, DocumentAttachmentState, ThinkActivityKind } from '../hooks/useThink'
 import type { VoiceState } from '../hooks/useVoice'
 import './GlassChatPanel.css'
 
@@ -8,6 +8,8 @@ interface GlassChatPanelProps {
   online: boolean
   messages: ChatMessage[]
   pending: boolean
+  activityKind: ThinkActivityKind
+  activityStartedAt: number | null
   onSend: (text: string) => void
   onSendImage: (prompt: string, images: File[]) => void
   onLearn: (content: string) => void

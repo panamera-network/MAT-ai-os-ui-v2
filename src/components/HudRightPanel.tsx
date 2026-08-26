@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { hasMemoryStats, isServiceOn } from '../domain/vision'
 import type { LearnSuggestionDetail, LearnSuggestionSummary, ServiceStatus, VisionEventEntry } from '../domain/vision'
@@ -328,13 +328,39 @@ function PendingLearnRow({ suggestion, busy, lastResult, fetchDetail, onResolve 
   )
 }
 
+/** `resolve`'s real result, one HUD event per resolution — 'learned' reads
+ * as success, 'rejected' as a deliberate (not alarming) warning, anything
+ * else (a real failure) as danger. Never fabricated: the message names the
+ * exact real status `usePendingLearn` returned. */
+function resultEventTone(status: string): HudEventTone {
+  if (status === 'learned') return 'success'
+  if (status === 'rejected') return 'warning'
+  return 'danger'
+}
+
 /** Real `GET /learn/pending` queue — the operator-review half of the
  * new-domain Learn flow (`/learn` itself auto-confirms create/improve;
  * only a brand-new domain ever lands here). Never mixed with MCP's own
  * pending-approvals count in the left panel — a different approval
- * concept entirely, no shared abstraction exists to fold them into. */
-function PendingLearnCard() {
+ * concept entirely, no shared abstraction exists to fold them into.
+ *
+ * Batch A: every real approve/reject result now also lands in Recent
+ * Events (`onEvent`), not just the row's own inline result text — fires
+ * exactly once per resolution, keyed on `lastResult`'s own object identity
+ * (a fresh object every real resolve, never on an unrelated re-render). */
+function PendingLearnCard({ onEvent }: { onEvent: AddHudEvent }) {
   const { suggestions, loading, pendingId, lastResult, resolve, fetchDetail } = usePendingLearn()
+
+  useEffect(() => {
+    if (!lastResult) return
+    const message = lastResult.status === 'learned'
+      ? 'Learn suggestion approved'
+      : lastResult.status === 'rejected'
+        ? 'Learn suggestion rejected'
+        : `Learn suggestion failed — ${lastResult.reason}`
+    onEvent(message, resultEventTone(lastResult.status))
+  }, [lastResult, onEvent])
+
   if (!loading && suggestions.length === 0) return null
 
   return (
@@ -581,7 +607,7 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
         </div>
       </section>
 
-      <PendingLearnCard />
+      <PendingLearnCard onEvent={onEvent} />
 
       <section className="hud-right-panel__card hud-right-panel__memory-card">
         <header className="hud-right-panel__card-header hud-memory__header">

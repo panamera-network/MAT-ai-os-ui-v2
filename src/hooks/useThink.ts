@@ -21,9 +21,21 @@ export interface ChatMessage {
   kind?: 'learn'
 }
 
+/** Which in-flight request `pending` refers to — a real, known fact (which
+ * adapter method is currently awaited), never a guessed sub-step. `null`
+ * whenever `pending` is false. Backing `activityStartedAt` is a real
+ * `Date.now()` timestamp, used only to render an honest elapsed-time
+ * counter — never a simulated/ticking progress bar. */
+export type ThinkActivityKind = 'think' | 'see' | 'learn' | null
+
 interface UseThinkResult {
   messages: ChatMessage[]
   pending: boolean
+  /** Which request is in flight right now (`null` when `pending` is false) —
+   * see `ThinkActivityKind`. */
+  activityKind: ThinkActivityKind
+  /** `Date.now()` when the in-flight request started, `null` when idle. */
+  activityStartedAt: number | null
   send: (text: string) => Promise<void>
   /** `/see` — the only existing upload/vision contract (images only, no
    * generic file-processing route exists). Shares `pending`/`messages` with
@@ -142,6 +154,8 @@ export function useThink(): UseThinkResult {
   const api = useVisionApi()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [pending, setPending] = useState(false)
+  const [activityKind, setActivityKind] = useState<ThinkActivityKind>(null)
+  const [activityStartedAt, setActivityStartedAt] = useState<number | null>(null)
   const [document, setDocument] = useState<AttachedDocument | null>(null)
   const [documentState, setDocumentState] = useState<DocumentAttachmentState>('idle')
   const [documentError, setDocumentError] = useState<string | null>(null)
@@ -157,6 +171,8 @@ export function useThink(): UseThinkResult {
     const context = [documentContext, conversationContext].filter(Boolean).join('\n\n')
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: trimmed }])
     setPending(true)
+    setActivityKind('think')
+    setActivityStartedAt(Date.now())
     try {
       const result = await api.think(context ? { text: trimmed, context } : { text: trimmed })
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'mat', text: result.response }])
@@ -165,6 +181,8 @@ export function useThink(): UseThinkResult {
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'system', text: detail }])
     } finally {
       setPending(false)
+      setActivityKind(null)
+      setActivityStartedAt(null)
     }
   }
 
@@ -174,6 +192,8 @@ export function useThink(): UseThinkResult {
     const label = images.length === 1 ? images[0].name : `${images.length} images`
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: `📎 ${label} — ${trimmedPrompt}` }])
     setPending(true)
+    setActivityKind('see')
+    setActivityStartedAt(Date.now())
     try {
       const result = await api.see({ prompt: trimmedPrompt, images })
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'mat', text: result.response }])
@@ -182,6 +202,8 @@ export function useThink(): UseThinkResult {
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'system', text: detail }])
     } finally {
       setPending(false)
+      setActivityKind(null)
+      setActivityStartedAt(null)
     }
   }
 
@@ -196,6 +218,8 @@ export function useThink(): UseThinkResult {
     const context = [buildDocumentContext(document), buildContext(messages)].filter(Boolean).join('\n\n')
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: `📚 Learn: ${trimmed}`, kind: 'learn' }])
     setPending(true)
+    setActivityKind('learn')
+    setActivityStartedAt(Date.now())
     try {
       const result = await api.learn(context ? { content: trimmed, context } : { content: trimmed })
       const role = result.status === 'rejected' || result.status === 'failed' ? 'system' : 'mat'
@@ -205,6 +229,8 @@ export function useThink(): UseThinkResult {
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'system', text: detail, kind: 'learn' }])
     } finally {
       setPending(false)
+      setActivityKind(null)
+      setActivityStartedAt(null)
     }
   }
 
@@ -238,6 +264,8 @@ export function useThink(): UseThinkResult {
   return {
     messages,
     pending,
+    activityKind,
+    activityStartedAt,
     send,
     sendImage,
     sendLearn,

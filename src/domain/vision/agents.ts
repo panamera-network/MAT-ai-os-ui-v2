@@ -1,4 +1,5 @@
 import type { BodyScoped } from './shared'
+import type { GovernanceCase } from './governance'
 
 export interface Agent {
   agent_id: string
@@ -13,6 +14,18 @@ export interface Agent {
   // though the old MAT-AI-OS-ui's `Agent` type carries an optional
   // `status?: 'active' | 'idle'` — that field always renders `undefined`
   // there today. See docs/VISION_API_CONTRACT.md's Agents section.
+  /** Batch B telemetry — real only for an agent created after that change
+   * shipped; `null` for one reconstructed from a pre-existing record. */
+  created_at: string | null
 }
 
-export type AgentsResult = BodyScoped<{ agents: Agent[] }>
+export type AgentsResult = BodyScoped<{
+  agents: Agent[]
+  /** Batch B telemetry — real, currently-active agent ids (in-memory,
+   * resets on backend restart). */
+  active_agent_ids: string[]
+  /** Real `GovernanceLifecycleEngine` cases (entity_type "agent") not yet
+   * resolved — "failed/unhealthy" is this list being non-empty, never a
+   * separate invented flag. */
+  unresolved_cases: GovernanceCase[]
+}>

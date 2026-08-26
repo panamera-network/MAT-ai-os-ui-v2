@@ -7,10 +7,19 @@ import { HudStatus } from '../components/HudStatus'
 import { HudLeftPanel } from '../components/HudLeftPanel'
 import { HudRightPanel } from '../components/HudRightPanel'
 import { GlassChatPanel } from '../components/GlassChatPanel'
+import { CardDetailOverlay } from '../components/CardDetailOverlay'
+import type { DetailCardId } from '../components/detailCardId'
 import { useHealth } from '../hooks/useHealth'
 import { useThink } from '../hooks/useThink'
 import { useVoice } from '../hooks/useVoice'
 import { useSpeak } from '../hooks/useSpeak'
+import { useAgents } from '../hooks/useAgents'
+import { useLoops } from '../hooks/useLoops'
+import { useModels } from '../hooks/useModels'
+import { useGovernance } from '../hooks/useGovernance'
+import { useMcp } from '../hooks/useMcp'
+import { useSkills } from '../hooks/useSkills'
+import { useBudget } from '../hooks/useBudget'
 import type { HudEvent, HudEventTone } from '../components/hudEvents'
 
 /**
@@ -27,13 +36,32 @@ import type { HudEvent, HudEventTone } from '../components/hudEvents'
  * `useHealth()` here (separate from `MatPresenceView`'s own call) feeds
  * `HudStatus` and `ActivityPanel`'s online/offline gating — each caller owns
  * its own poll, same pattern as every other canvas-view's data.
+ *
+ * Batch A: the six left-panel resource hooks are called HERE, not inside
+ * `HudLeftPanel` itself, because `CardDetailOverlay` needs the exact same
+ * data when a card is clicked open — lifting the fetch up means both
+ * consumers share one poll each, never a second independent fetch per card.
+ * `activeDetail` (which card's overlay, if any, is open) lives here too,
+ * since it's the one thing `HudLeftPanel` (click source), `GlassChatPanel`
+ * (minimizes while a detail is open), and `CardDetailOverlay` all need to
+ * agree on.
  */
 export function HomeScreen() {
   const [view, setView] = useState<ActiveCanvasView>('presence')
   const { connection, health } = useHealth()
+  const agents = useAgents()
+  const loops = useLoops()
+  const models = useModels()
+  const governance = useGovernance()
+  const mcp = useMcp()
+  const skills = useSkills()
+  const budget = useBudget()
+  const [activeDetail, setActiveDetail] = useState<DetailCardId | null>(null)
   const {
     messages,
     pending,
+    activityKind,
+    activityStartedAt,
     send,
     sendImage,
     sendLearn,
@@ -69,15 +97,44 @@ export function HomeScreen() {
       left={
         <>
           <CanvasSwitcher view={view} onChange={setView} />
-          <HudLeftPanel />
+          <HudLeftPanel
+            agents={agents}
+            loops={loops}
+            models={models}
+            governance={governance}
+            mcp={mcp}
+            skills={skills}
+            budget={budget}
+            health={health}
+            onSelect={setActiveDetail}
+          />
         </>
       }
       right={<HudRightPanel events={hudEvents} onEvent={addHudEvent} />}
+      chatMinimized={activeDetail !== null}
+      centerDetail={
+        activeDetail && (
+          <CardDetailOverlay
+            cardId={activeDetail}
+            agents={agents}
+            loops={loops}
+            models={models}
+            governance={governance}
+            mcp={mcp}
+            skills={skills}
+            budget={budget}
+            health={health}
+            onClose={() => setActiveDetail(null)}
+          />
+        )
+      }
       centerChat={
         <GlassChatPanel
           online={connection === 'online'}
           messages={messages}
           pending={pending}
+          activityKind={activityKind}
+          activityStartedAt={activityStartedAt}
           onSend={send}
           onSendImage={sendImage}
           onLearn={sendLearn}

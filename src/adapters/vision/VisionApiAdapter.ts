@@ -1,5 +1,6 @@
 import type {
   AgentsResult,
+  BudgetResult,
   ControlActionResult,
   ControlStatusResult,
   DocumentReadResult,
@@ -8,6 +9,7 @@ import type {
   Health,
   IdentityResult,
   KillResult,
+  KnowledgeResult,
   LearnRequest,
   LearnResult,
   LearnSuggestionDetail,
@@ -28,6 +30,7 @@ import type {
   ServicesResult,
   ServiceStatus,
   SkillsResult,
+  SkillVersionsResult,
   SoulResult,
   SpeakRequest,
   SpeakResult,
@@ -80,9 +83,12 @@ export interface VisionApiAdapter {
   getGovernance(signal?: AbortSignal): Promise<GovernanceResult>
   getMcp(signal?: AbortSignal): Promise<McpResult>
   getSkills(signal?: AbortSignal): Promise<SkillsResult>
+  getSkillVersions(skillId: string, signal?: AbortSignal): Promise<SkillVersionsResult>
+  getKnowledge(domain?: string, signal?: AbortSignal): Promise<KnowledgeResult>
 
   getModels(signal?: AbortSignal): Promise<ModelsResult>
   selectModel(request: ModelSelectRequest, signal?: AbortSignal): Promise<ModelsResult>
+  getBudget(signal?: AbortSignal): Promise<BudgetResult>
 
   getServices(signal?: AbortSignal): Promise<ServicesResult>
   getService(serviceId: string, signal?: AbortSignal): Promise<ServiceStatus>

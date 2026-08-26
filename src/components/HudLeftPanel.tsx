@@ -1,22 +1,68 @@
-import type { ReactNode } from 'react'
-import { CAPABILITIES, TIERS, type ModelProfiles } from '../domain/vision'
-import { useAgents } from '../hooks/useAgents'
-import { useLoops } from '../hooks/useLoops'
-import { useModels } from '../hooks/useModels'
-import { useGovernance } from '../hooks/useGovernance'
-import { useMcp } from '../hooks/useMcp'
-import { useSkills } from '../hooks/useSkills'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { type Health } from '../domain/vision'
+import type { useAgents } from '../hooks/useAgents'
+import type { useLoops } from '../hooks/useLoops'
+import type { useModels } from '../hooks/useModels'
+import type { useGovernance } from '../hooks/useGovernance'
+import type { useMcp } from '../hooks/useMcp'
+import type { useSkills } from '../hooks/useSkills'
+import type { useBudget } from '../hooks/useBudget'
 import { formatResourceValue } from '../hooks/useVisionResource'
+import type { DetailCardId } from './detailCardId'
 import './HudLeftPanel.css'
 
-function countConfiguredSlots(profiles: ModelProfiles): number {
-  let count = 0
-  for (const capability of CAPABILITIES) {
-    for (const tier of TIERS) {
-      if (profiles[capability]?.[tier]) count += 1
+/** The "provider/model" key with the highest real dispatch count — `null`
+ * for an empty (or not-yet-populated) usage record, never a guess. */
+function mostUsedModel(usage: Record<string, number>): string | null {
+  let top: string | null = null
+  let topCount = -1
+  for (const [key, count] of Object.entries(usage)) {
+    if (count > topCount) {
+      top = key
+      topCount = count
     }
   }
-  return count
+  return top
+}
+
+function sumRecordValues(record: Record<string, number>): number {
+  return Object.values(record).reduce((sum, value) => sum + value, 0)
+}
+
+/** Small enough real costs (a per-token estimate) that 2 decimals often
+ * rounds to "$0.00" — 4 decimals stays honest without exaggerating. */
+function formatUsd(value: number): string {
+  return `$${value.toFixed(4)}`
+}
+
+/** Most frequent `domain` among `agents` — a real derivation over the exact
+ * roster the card already has, never a fabricated field. Ties resolve to
+ * whichever domain was encountered first (stable, not random). */
+function computeTopDomain(agents: { domain: string }[]): string {
+  if (agents.length === 0) return '—'
+  const counts = new Map<string, number>()
+  for (const agent of agents) {
+    counts.set(agent.domain, (counts.get(agent.domain) ?? 0) + 1)
+  }
+  let topDomain = agents[0].domain
+  let topCount = 0
+  for (const [domain, count] of counts) {
+    if (count > topCount) {
+      topDomain = domain
+      topCount = count
+    }
+  }
+  return topDomain
+}
+
+const RECENT_LEARNED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Skills whose real `learned_at` falls within the last 7 days — skills with
+ * no `learned_at` at all (built-in, never-learned ones) are never counted,
+ * not treated as "not recent". */
+function countRecentlyLearned(skills: { learned_at?: string }[]): number {
+  const cutoff = Date.now() - RECENT_LEARNED_WINDOW_MS
+  return skills.filter((skill) => skill.learned_at && new Date(skill.learned_at).getTime() >= cutoff).length
 }
 
 function AgentsIcon() {
@@ -37,7 +83,7 @@ function LoopsIcon() {
   )
 }
 
-function LlmIcon() {
+function ModelsIcon() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
       <rect x="4" y="4" width="8" height="8" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
@@ -91,46 +137,127 @@ interface ResourceStateSource {
   loading: boolean
 }
 
+/** `true` only for a real `BodyScoped<T>` response that explicitly says
+ * `body_attached: false` — a genuine "MAT answered, but no V2Body is
+ * running" fact, never guessed for a shape that doesn't carry the field at
+ * all (e.g. `ModelsResult`, MAT's own registry, isn't Body-scoped). */
+function isBodyDetached(data: unknown): boolean {
+  return typeof data === 'object' && data !== null && 'body_attached' in data && (data as { body_attached: unknown }).body_attached === false
+}
+
 function getResourceState(resource: ResourceStateSource): { label: string; tone: string } {
-  if (resource.data) return { label: 'ready', tone: 'ready' }
+  if (resource.data) {
+    if (isBodyDetached(resource.data)) return { label: 'no body', tone: 'degraded' }
+    return { label: 'ready', tone: 'ready' }
+  }
   if (resource.loading) return { label: 'loading', tone: 'loading' }
   if (resource.error) return { label: resource.error.unreachable ? 'offline' : 'error', tone: 'error' }
   return { label: 'empty', tone: 'empty' }
 }
 
+/** "3s"/"2m"/"1h" since `timestamp` — recomputed at render time (every poll
+ * naturally re-renders this every `LEFT_PANEL_POLL_MS`), never a ticking
+ * clock/interval of its own. `null` before the first successful fetch ever
+ * lands, same as `lastUpdated` itself. */
+function formatRelativeTime(timestamp: number | null): string | null {
+  if (timestamp === null) return null
+  const deltaSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000))
+  if (deltaSeconds < 5) return 'now'
+  if (deltaSeconds < 60) return `${deltaSeconds}s`
+  const deltaMinutes = Math.round(deltaSeconds / 60)
+  if (deltaMinutes < 60) return `${deltaMinutes}m`
+  return `${Math.round(deltaMinutes / 60)}h`
+}
+
+/** Up/down only once two REAL consecutive poll samples actually differ —
+ * `null` (no indicator rendered) until then, and again whenever the caller
+ * passes `null` (not ready / not a numeric headline, e.g. Models' Active
+ * Model string). Never a guess, never shown on the very first sample. */
+function useTrend(value: number | null): 'up' | 'down' | null {
+  const previousRef = useRef<number | null>(null)
+  const [trend, setTrend] = useState<'up' | 'down' | null>(null)
+
+  useEffect(() => {
+    if (value === null) return
+    const previous = previousRef.current
+    if (previous !== null && value !== previous) {
+      setTrend(value > previous ? 'up' : 'down')
+    }
+    previousRef.current = value
+  }, [value])
+
+  return trend
+}
+
 interface InfoCardProps {
+  id: DetailCardId
   accent: 'cyan' | 'blue' | 'violet' | 'green' | 'amber' | 'ice'
   icon: ReactNode
   title: string
   mainLabel: string
   mainValue: string
+  /** Raw numeric value backing `mainValue`, for trend tracking only — `null`
+   * when not ready, or when the headline isn't a plain count (Models). */
+  trendValue: number | null
   metrics: { label: string; value: string }[]
   state: { label: string; tone: string }
+  lastUpdated: number | null
+  onSelect: (id: DetailCardId) => void
+  /** Real, card-specific business-data attention (e.g. unresolved cases,
+   * blocked-today > 0) — ORed with the connectivity-derived degraded/error
+   * tone below, never a substitute for it. `false`/omitted when the
+   * resource isn't ready, so this never flashes ahead of real data. */
+  attention?: boolean
 }
 
-function InfoCard({ accent, icon, title, mainLabel, mainValue, metrics, state }: InfoCardProps) {
-  const hasData = state.tone === 'ready'
+function InfoCard({ id, accent, icon, title, mainLabel, mainValue, trendValue, metrics, state, lastUpdated, onSelect, attention: dataAttention }: InfoCardProps) {
+  const isReady = state.tone === 'ready'
+  const trend = useTrend(isReady ? trendValue : null)
+  const updated = formatRelativeTime(lastUpdated)
+  const attention = state.tone === 'degraded' || state.tone === 'error' || Boolean(dataAttention)
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onSelect(id)
+    }
+  }
 
   return (
-    <section className={`hud-left-panel__card hud-left-panel__card--${accent}`}>
+    <section
+      className={`hud-left-panel__card hud-left-panel__card--${accent}${attention ? ' is-attention' : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(id)}
+      onKeyDown={handleKeyDown}
+      aria-label={`Open ${title} details`}
+    >
       <header className="hud-left-panel__card-header">
         <span className="hud-left-panel__header-icon">{icon}</span>
         <span>{title}</span>
         <span className={`hud-left-panel__state is-${state.tone}`}>
           <span className="hud-left-panel__state-dot" />
           {state.label}
+          {updated && <span className="hud-left-panel__updated"> · {updated}</span>}
         </span>
       </header>
       <div className="hud-left-panel__card-body">
         <div className="hud-left-panel__metric-ring">
-          <strong>{hasData ? mainValue : '—'}</strong>
+          <strong>
+            {mainValue}
+            {trend && (
+              <span className={`hud-left-panel__trend hud-left-panel__trend--${trend}`} aria-hidden="true">
+                {trend === 'up' ? '▲' : '▼'}
+              </span>
+            )}
+          </strong>
           <span>{mainLabel}</span>
         </div>
         <dl className="hud-left-panel__metrics">
           {metrics.map((metric) => (
             <div key={metric.label}>
               <dt>{metric.label}</dt>
-              <dd>{hasData ? metric.value : '—'}</dd>
+              <dd>{metric.value}</dd>
             </div>
           ))}
         </dl>
@@ -139,103 +266,151 @@ function InfoCard({ accent, icon, title, mainLabel, mainValue, metrics, state }:
   )
 }
 
+interface HudLeftPanelProps {
+  agents: ReturnType<typeof useAgents>
+  loops: ReturnType<typeof useLoops>
+  models: ReturnType<typeof useModels>
+  governance: ReturnType<typeof useGovernance>
+  mcp: ReturnType<typeof useMcp>
+  skills: ReturnType<typeof useSkills>
+  budget: ReturnType<typeof useBudget>
+  health: Health | null
+  onSelect: (id: DetailCardId) => void
+}
+
 /**
- * Left info zone — separate real-data cards for Agents, Loops, LLM/model
- * routing, Governance, MCP, and Skills. Every value is a direct count/derivation
- * from a real VISION API response, formatted through `formatResourceValue`
- * so "still loading", "MAT unreachable", "request failed", and "loaded but
- * genuinely empty" each read distinctly instead of collapsing into one dash
- * — never a placeholder for a field the API doesn't expose. Skills is just a
- * count today (`useSkills` is the drawer-ready data path — a real skills
- * list/drawer UI is future work, not this pass's job).
+ * Left info zone — Batch A (live metrics + drill-down): every card now polls
+ * (see `useVisionResource`'s `pollMs`, wired in each `use*` hook), is
+ * clickable (opens `CardDetailOverlay` for that card), shows a small
+ * up/down trend once two real consecutive polls disagree, and an honest
+ * `body_attached: false` no longer renders as green "ready" (see
+ * `getResourceState`). Resource hooks are called by `HomeScreen` and handed
+ * down as props — `CardDetailOverlay` needs the exact same data, and
+ * calling each hook a second time here would double the request rate for
+ * no reason.
  */
-export function HudLeftPanel() {
-  const agents = useAgents()
-  const loops = useLoops()
-  const models = useModels()
-  const governance = useGovernance()
-  const mcp = useMcp()
-  const skills = useSkills()
+export function HudLeftPanel({ agents, loops, models, governance, mcp, skills, budget, health, onSelect }: HudLeftPanelProps) {
+  const agentsState = getResourceState(agents)
+  const loopsState = getResourceState(loops)
+  const modelsState = getResourceState(models)
+  const governanceState = getResourceState(governance)
+  const mcpState = getResourceState(mcp)
+  const skillsState = getResourceState(skills)
+
+  const unresolvedAgentCases = agents.data ? agents.data.unresolved_cases.length : 0
+  const failedLoopsToday = loops.data ? loops.data.today.failed : 0
+  const blockedToday = governance.data ? governance.data.blocked_today.length : 0
+  const mcpFailingCount = mcp.data ? Object.values(mcp.data.activity).filter((entry) => entry.failure_count > 0).length : 0
+  const budgetEmergency = budget.data ? Boolean((budget.data.status as { emergency?: unknown }).emergency) : false
 
   return (
     <div className="hud-left-panel">
       <InfoCard
+        id="agents"
         accent="cyan"
         icon={<AgentsIcon />}
         title="Agents"
         mainLabel="total"
         mainValue={formatResourceValue(agents, (d) => String(d.agents.length))}
+        trendValue={agents.data ? agents.data.agents.length : null}
         metrics={[
-          { label: 'Global', value: formatResourceValue(agents, (d) => String(d.agents.filter((agent) => agent.is_global).length)) },
-          { label: 'Domains', value: formatResourceValue(agents, (d) => String(new Set(d.agents.map((agent) => agent.domain)).size)) },
-          { label: 'Skill links', value: formatResourceValue(agents, (d) => String(d.agents.reduce((sum, agent) => sum + agent.skill_ids.length, 0))) },
+          { label: 'Top domain', value: formatResourceValue(agents, (d) => computeTopDomain(d.agents)) },
+          { label: 'Active', value: formatResourceValue(agents, (d) => String(d.active_agent_ids.length)) },
+          { label: 'Unresolved', value: formatResourceValue(agents, (d) => String(d.unresolved_cases.length)) },
         ]}
-        state={getResourceState(agents)}
+        state={agentsState}
+        lastUpdated={agents.lastUpdated}
+        onSelect={onSelect}
+        attention={agentsState.tone === 'ready' && unresolvedAgentCases > 0}
       />
       <InfoCard
+        id="loops"
         accent="blue"
         icon={<LoopsIcon />}
         title="Loops"
         mainLabel="active"
         mainValue={formatResourceValue(loops, (d) => String(d.loops.filter((loop) => loop.status === 'active').length))}
+        trendValue={loops.data ? loops.data.loops.filter((loop) => loop.status === 'active').length : null}
         metrics={[
-          { label: 'Total', value: formatResourceValue(loops, (d) => String(d.loops.length)) },
+          { label: 'Completed today', value: formatResourceValue(loops, (d) => String(d.today.completed)) },
+          { label: 'Failed today', value: formatResourceValue(loops, (d) => String(d.today.failed)) },
           { label: 'Paused', value: formatResourceValue(loops, (d) => String(d.loops.filter((loop) => loop.status === 'paused').length)) },
-          { label: 'Runs', value: formatResourceValue(loops, (d) => String(d.loops.reduce((sum, loop) => sum + loop.run_count, 0))) },
         ]}
-        state={getResourceState(loops)}
+        state={loopsState}
+        lastUpdated={loops.lastUpdated}
+        onSelect={onSelect}
+        attention={loopsState.tone === 'ready' && failedLoopsToday > 0}
       />
       <InfoCard
+        id="models"
         accent="violet"
-        icon={<LlmIcon />}
-        title="LLM"
-        mainLabel="slots"
-        mainValue={formatResourceValue(models, (d) => String(countConfiguredSlots(d.profiles)))}
+        icon={<ModelsIcon />}
+        title="Models"
+        mainLabel="active model"
+        mainValue={health ? `${health.active_model.provider}/${health.active_model.model}` : formatResourceValue(models, () => '—')}
+        trendValue={null}
         metrics={[
-          { label: 'Capabilities', value: formatResourceValue(models, (d) => String(CAPABILITIES.filter((capability) => TIERS.some((tier) => Boolean(d.profiles[capability]?.[tier]))).length)) },
-          { label: 'Primary', value: formatResourceValue(models, (d) => String(CAPABILITIES.filter((capability) => Boolean(d.profiles[capability]?.primary)).length)) },
-          { label: 'Fallbacks', value: formatResourceValue(models, (d) => String(CAPABILITIES.reduce((sum, capability) => sum + TIERS.slice(1).filter((tier) => Boolean(d.profiles[capability]?.[tier])).length, 0))) },
+          { label: 'Most used', value: formatResourceValue(budget, (d) => mostUsedModel(d.model_usage) ?? '—') },
+          { label: 'Fallbacks', value: formatResourceValue(budget, (d) => String(sumRecordValues(d.fallback_counts))) },
+          { label: 'Budget', value: formatResourceValue(budget, (d) => `${formatUsd(d.used_usd)} / ${formatUsd(d.available_usd)}`) },
         ]}
-        state={getResourceState(models)}
+        state={modelsState}
+        lastUpdated={models.lastUpdated}
+        onSelect={onSelect}
+        attention={budgetEmergency}
       />
       <InfoCard
+        id="governance"
         accent="green"
         icon={<GovernanceIcon />}
         title="Governance"
         mainLabel="active"
         mainValue={formatResourceValue(governance, (d) => String(d.laws.active_count))}
+        trendValue={governance.data ? governance.data.laws.active_count : null}
         metrics={[
-          { label: 'Total laws', value: formatResourceValue(governance, (d) => String(d.laws.total)) },
-          { label: 'Inactive', value: formatResourceValue(governance, (d) => String(d.laws.inactive_count)) },
-          { label: 'Cases', value: formatResourceValue(governance, (d) => String(d.lifecycle.total_cases)) },
+          { label: 'Blocked today', value: formatResourceValue(governance, (d) => String(d.blocked_today.length)) },
+          { label: 'Warnings today', value: formatResourceValue(governance, (d) => String(d.warnings_today.length)) },
+          { label: 'Rules triggered', value: formatResourceValue(governance, (d) => String(d.rules_triggered_today)) },
         ]}
-        state={getResourceState(governance)}
+        state={governanceState}
+        lastUpdated={governance.lastUpdated}
+        onSelect={onSelect}
+        attention={governanceState.tone === 'ready' && blockedToday > 0}
       />
       <InfoCard
+        id="mcp"
         accent="amber"
         icon={<McpIcon />}
         title="MCP"
         mainLabel="servers"
         mainValue={formatResourceValue(mcp, (d) => String(d.servers.length))}
+        trendValue={mcp.data ? mcp.data.servers.length : null}
         metrics={[
           { label: 'Pending', value: formatResourceValue(mcp, (d) => String(d.pending_approvals.length)) },
-          { label: 'Agents', value: formatResourceValue(mcp, (d) => String(new Set(d.pending_approvals.map((approval) => approval.agent_id)).size)) },
-          { label: 'Skill grants', value: formatResourceValue(mcp, (d) => String(d.pending_approvals.reduce((sum, approval) => sum + approval.granting_skills.length, 0))) },
+          { label: 'Responding', value: formatResourceValue(mcp, (d) => String(Object.values(d.activity).filter((entry) => entry.success_count > 0).length)) },
+          { label: 'Has failures', value: formatResourceValue(mcp, (d) => String(Object.values(d.activity).filter((entry) => entry.failure_count > 0).length)) },
         ]}
-        state={getResourceState(mcp)}
+        state={mcpState}
+        lastUpdated={mcp.lastUpdated}
+        onSelect={onSelect}
+        attention={mcpState.tone === 'ready' && mcpFailingCount > 0}
       />
       <InfoCard
+        id="skills"
         accent="ice"
         icon={<SkillsIcon />}
         title="Skills"
         mainLabel="total"
         mainValue={formatResourceValue(skills, (d) => String(d.skills.length))}
+        trendValue={skills.data ? skills.data.skills.length : null}
         metrics={[
-          { label: 'Global', value: formatResourceValue(skills, (d) => String(d.skills.filter((skill) => skill.is_global).length)) },
-          { label: 'Personal', value: formatResourceValue(skills, (d) => String(d.skills.filter((skill) => Boolean(skill.owner_user_id)).length)) },
-          { label: 'MCP linked', value: formatResourceValue(skills, (d) => String(d.skills.filter((skill) => (skill.mcp_servers?.length ?? 0) > 0).length)) },
+          { label: 'Domains covered', value: formatResourceValue(skills, (d) => String(new Set(d.skills.map((skill) => skill.domain)).size)) },
+          { label: 'Learned recently', value: formatResourceValue(skills, (d) => String(countRecentlyLearned(d.skills))) },
+          { label: 'Upgraded', value: formatResourceValue(skills, (d) => String(d.upgraded_count)) },
         ]}
-        state={getResourceState(skills)}
+        state={skillsState}
+        lastUpdated={skills.lastUpdated}
+        onSelect={onSelect}
       />
     </div>
   )

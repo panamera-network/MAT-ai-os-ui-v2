@@ -7,10 +7,26 @@ interface UseVisionResourceResult<T> {
   data: T | null
   error: VisionApiError | null
   loading: boolean
+  /** `Date.now()` of the last successful fetch, or `null` before the first
+   * one ever lands — real fetch history, never a guessed/ticking clock. */
+  lastUpdated: number | null
   /** Re-runs the same fetch — for after an action that changes this
    * resource's own state (e.g. a service start/stop), not for polling. */
   refetch: () => void
 }
+
+interface UseVisionResourceOptions {
+  /** Opt-in live refresh — undefined (the default) preserves the original
+   * fetch-once-on-mount behavior exactly, for every existing caller that
+   * doesn't pass this. Only the Glass HUD's left-panel cards (Batch A: Agents/
+   * Loops/Models/Governance/MCP/Skills) opt in — Memory, Events, and Pending
+   * Learn stay glance-and-load, unchanged. */
+  pollMs?: number
+}
+
+/** Shared poll cadence for every left-panel card resource that opts in —
+ * one constant so all six stay in lockstep and there's one place to retune. */
+export const LEFT_PANEL_POLL_MS = 8000
 
 /** How long to wait before retrying a fetch that failed because MAT simply
  * wasn't reachable yet — never for a genuine HTTP error response, see below. */
@@ -36,40 +52,55 @@ const RETRY_WHILE_UNREACHABLE_MS = 3000
  * HTTP error response (auth, 500, ...) is left as-is, since blindly
  * retrying that wouldn't fix it.
  */
-export function useVisionResource<T>(fetcher: (api: VisionApiAdapter, signal: AbortSignal) => Promise<T>): UseVisionResourceResult<T> {
+export function useVisionResource<T>(
+  fetcher: (api: VisionApiAdapter, signal: AbortSignal) => Promise<T>,
+  options?: UseVisionResourceOptions,
+): UseVisionResourceResult<T> {
   const api = useVisionApi()
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<VisionApiError | null>(null)
   const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
+  const pollMs = options?.pollMs
 
   useEffect(() => {
     const controller = new AbortController()
     let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let pollTimer: ReturnType<typeof setInterval> | null = null
     setLoading(true)
     fetcher(api, controller.signal)
       .then((result) => {
         setData(result)
         setError(null)
+        setLastUpdated(Date.now())
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return
         const visionError = err instanceof VisionApiError ? err : null
         setError(visionError)
-        if (visionError?.unreachable) {
+        // While actively polling, the interval below already retries on its
+        // own cadence -- a second, faster timer racing it would just cause
+        // two in-flight fetches. This fast path stays for the non-polling
+        // (glance-and-load) callers, unchanged from before.
+        if (visionError?.unreachable && !pollMs) {
           retryTimer = setTimeout(() => setRefreshToken((n) => n + 1), RETRY_WHILE_UNREACHABLE_MS)
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
+    if (pollMs) {
+      pollTimer = setInterval(() => setRefreshToken((n) => n + 1), pollMs)
+    }
     return () => {
       controller.abort()
       if (retryTimer) clearTimeout(retryTimer)
+      if (pollTimer) clearInterval(pollTimer)
     }
-  }, [api, fetcher, refreshToken])
+  }, [api, fetcher, refreshToken, pollMs])
 
-  return { data, error, loading, refetch: () => setRefreshToken((n) => n + 1) }
+  return { data, error, loading, lastUpdated, refetch: () => setRefreshToken((n) => n + 1) }
 }
 
 const RESOURCE_STATE_LABEL = {

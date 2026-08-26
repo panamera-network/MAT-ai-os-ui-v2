@@ -679,18 +679,19 @@
 .hud-right-panel__events-empty {
   margin: auto 0;
   color: var(--hud-text-faint);
-  font-size: calc(8px + var(--hud-font-boost));
+  font-size: calc(10px + var(--hud-font-boost));
   line-height: 1.4;
 }
 
 .hud-event-row {
   display: grid;
-  grid-template-columns: 6px 48px 1fr;
+  grid-template-columns: 6px 54px 1fr;
   align-items: start;
-  gap: 7px;
+  gap: 8px;
+  padding: 2px 0;
   color: var(--hud-text-muted);
-  font-size: calc(8px + var(--hud-font-boost));
-  line-height: 1.35;
+  font-size: calc(10px + var(--hud-font-boost));
+  line-height: 1.5;
 }
 
 .hud-event-row time {
@@ -726,6 +727,7 @@
 
 .hud-pending-learn-card {
   border-color: rgba(245, 158, 11, 0.28);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 0 22px rgba(245, 158, 11, 0.06);
 }
 
 .hud-pending-learn-card .hud-right-panel__card-header {
