@@ -1,0 +1,108 @@
+.skill-snapshot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(184, 163, 255, 0.18);
+}
+
+.skill-snapshot__empty {
+  margin-top: 2px;
+  color: var(--hud-text-faint);
+  font-size: calc(9px + var(--hud-font-boost));
+}
+
+.skill-snapshot__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skill-snapshot__badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  font-size: calc(7px + var(--hud-font-boost));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.skill-snapshot__badge--created {
+  color: var(--hud-green);
+}
+
+.skill-snapshot__badge--upgraded {
+  color: var(--hud-cyan);
+}
+
+.skill-snapshot__meta-detail {
+  color: var(--hud-text-faint);
+  font-size: calc(8px + var(--hud-font-boost));
+}
+
+.skill-snapshot__field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.skill-snapshot__field-label {
+  color: var(--hud-text-faint);
+  font-size: calc(8px + var(--hud-font-boost));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.skill-snapshot__field-value {
+  color: var(--hud-text-muted);
+  font-size: calc(9px + var(--hud-font-boost));
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.skill-snapshot__diff-toggle {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--hud-cyan);
+  font-family: var(--hud-font-mono);
+  font-size: calc(8px + var(--hud-font-boost));
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.skill-snapshot__diff-toggle:hover {
+  color: var(--hud-text);
+}
+
+.skill-snapshot__diff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(184, 163, 255, 0.18);
+}
+
+.skill-snapshot__diff-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.skill-snapshot__diff-before {
+  color: var(--hud-red);
+  font-size: calc(9px + var(--hud-font-boost));
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.skill-snapshot__diff-after {
+  color: var(--hud-green);
+  font-size: calc(9px + var(--hud-font-boost));
+  line-height: 1.4;
+  white-space: pre-wrap;
+}

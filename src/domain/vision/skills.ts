@@ -21,9 +21,13 @@ export interface Skill {
   // never got server-side data for). Do not invent a value here.
 }
 
-/** One `SkillVersioning` snapshot record's commonly-populated subset — the
- * full `data` field (a complete skill-dict copy) is deliberately omitted,
- * nothing here renders it. */
+/** One `SkillVersioning` snapshot record. `data` is the full skill-dict
+ * snapshot the backend already sends — the skill's state BEFORE the update
+ * this record was saved for (`SkillRegistry.update()` snapshots `current`
+ * before merging in the new fields). Needed to build a Before/After diff
+ * against the skill's CURRENT state (see `SkillSnapshotPanel`); typed loosely
+ * since it's an arbitrary-shaped historical snapshot, not guaranteed to match
+ * today's `Skill` shape field-for-field. */
 export interface SkillVersion {
   version_id: string
   skill_id: string
@@ -31,6 +35,7 @@ export interface SkillVersion {
   provenance: string
   reason: string
   created_at: string
+  data: Record<string, unknown>
 }
 
 export type SkillsResult = BodyScoped<{

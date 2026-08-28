@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useVisionApi } from '../app/VisionApiProvider'
 import { VisionApiError } from '../adapters/vision'
-import type { LearnResult } from '../domain/vision'
+import type { LearnReceipt, LearnResult } from '../domain/vision'
 
 export interface AttachedDocument {
   filename: string
@@ -19,6 +19,23 @@ export interface ChatMessage {
    * regardless of role, since Learn is a distinct action from normal chat,
    * never something MAT "said" in conversation (see `sendLearn` below). */
   kind?: 'learn'
+  /** Present only for a Learn result that carries a real backend receipt —
+   * `text` stays just the short status headline in that case (e.g.
+   * "✅ Learned"); the receipt's own fields carry the rest. Absent entirely
+   * (not even `null`) for every other message, and for a Learn result with
+   * no receipt — the old flat `text`-only rendering is the fallback. */
+  receipt?: LearnReceipt
+  /** `LearnResult.skill_id`/`domain` verbatim — the ONE structurally-known
+   * applied skill for this Learn result (present only when `status ===
+   * 'learned'`). For a multi-skill batch this is the FIRST applied skill
+   * only (the receipt's own `changed` text may name more; only this one
+   * skill_id is reliably known well enough to build a "View Updated Skill"
+   * action against — see the Repo Deep Fetch/Multi-Skill audit for why a
+   * full per-skill list isn't available without a backend change). Absent
+   * (not even `null`) for every message that isn't a successful Learn
+   * result. */
+  skillId?: string | null
+  skillDomain?: string | null
 }
 
 /** Which in-flight request `pending` refers to — a real, known fact (which
@@ -86,11 +103,22 @@ const LEARN_STATUS_LABEL: Record<LearnResult['status'], string> = {
   failed: 'Learn failed',
 }
 
-function formatLearnResult(result: LearnResult): string {
-  const parts = [LEARN_STATUS_LABEL[result.status]]
-  if (result.skill_id) parts.push(`(${result.skill_id}${result.domain ? ` · ${result.domain}` : ''})`)
-  if (result.reason) parts.push(`— ${result.reason}`)
-  return parts.join(' ')
+/** `text` is always the short status headline ("✅ Learned", never the
+ * skill_id/domain/reason parenthetical the old fallback-only shape used) --
+ * the real detail lives in `receipt` (`changed` already says "created skill
+ * X"/"upgraded skill Y"). `receipt` is omitted entirely (not `null`) when
+ * the backend didn't send one, so the old flat text -- skill_id/domain/
+ * reason folded into one line, exactly as before this batch -- is the
+ * fallback for that case only. */
+function formatLearnResult(result: LearnResult): { text: string; receipt?: LearnReceipt } {
+  const headline = LEARN_STATUS_LABEL[result.status]
+  if (!result.receipt) {
+    const parts = [headline]
+    if (result.skill_id) parts.push(`(${result.skill_id}${result.domain ? ` · ${result.domain}` : ''})`)
+    if (result.reason) parts.push(`— ${result.reason}`)
+    return { text: parts.join(' ') }
+  }
+  return { text: headline, receipt: result.receipt }
 }
 
 /** Real bug found via live testing: every `/think` call sent only `{ text }`
@@ -223,7 +251,11 @@ export function useThink(): UseThinkResult {
     try {
       const result = await api.learn(context ? { content: trimmed, context } : { content: trimmed })
       const role = result.status === 'rejected' || result.status === 'failed' ? 'system' : 'mat'
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role, text: formatLearnResult(result), kind: 'learn' }])
+      const { text, receipt } = formatLearnResult(result)
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role, text, kind: 'learn', receipt, skillId: result.skill_id, skillDomain: result.domain },
+      ])
     } catch (err) {
       const detail = err instanceof VisionApiError ? err.detail : 'Something went wrong.'
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'system', text: detail, kind: 'learn' }])

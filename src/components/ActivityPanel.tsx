@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import type { LearnReceipt } from '../domain/vision'
 import type { AttachedDocument, ChatMessage, DocumentAttachmentState, ThinkActivityKind } from '../hooks/useThink'
 import type { VoiceState } from '../hooks/useVoice'
+import { SkillSnapshotPanel } from './SkillSnapshotPanel'
 import './ActivityPanel.css'
 
 interface ActivityPanelProps {
@@ -69,6 +71,104 @@ function PendingActivity({ kind, startedAt }: { kind: Exclude<ThinkActivityKind,
     <div className="activity-message activity-message--mat activity-message--pending">
       {ACTIVITY_LABEL[kind]}
       <span className="activity-panel__elapsed">{formatElapsed(now - startedAt)}</span>
+    </div>
+  )
+}
+
+/** Plain-text rendition of a Learning Receipt, for Copy only — never shown
+ * raw in the UI itself (that's `LearnReceiptView` below). `changed` is
+ * rendered exactly as the backend sent it, never re-derived here. */
+function buildFullReceiptText(headline: string, receipt: LearnReceipt): string {
+  const lines = [headline]
+  if (receipt.found) lines.push(`Found: ${receipt.found}`)
+  if (receipt.learned) lines.push(`Learned: ${receipt.learned}`)
+  if (receipt.changed) lines.push(`Changed: ${receipt.changed}`)
+  if (receipt.why) lines.push(`Why: ${receipt.why}`)
+  if (receipt.source) lines.push(`Source: ${receipt.source}`)
+  return lines.join('\n')
+}
+
+/**
+ * Compact Learning Receipt — `headline` (the short status line) plus
+ * `changed` shown inline (the one fact users most want at a glance, in the
+ * backend's own exact words), with Found/Learned/Why/Source behind an
+ * expandable toggle so a short receipt stays compact and a long one doesn't
+ * force its way into view. Every value here is rendered verbatim from the
+ * backend — nothing here computes or guesses any of it.
+ */
+function LearnReceiptView({
+  headline,
+  receipt,
+  skillId,
+}: {
+  headline: string
+  receipt: LearnReceipt
+  /** `ChatMessage.skillId` — the one structurally-known applied skill for
+   * this Learn result. Absent/null for a rejected/pending/failed result, or
+   * a Learn response with no receipt at all. */
+  skillId?: string | null
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [skillOpen, setSkillOpen] = useState(false)
+  const hasDetails = Boolean(receipt.found || receipt.learned || receipt.why || receipt.source)
+
+  // Derived ONLY to pick which message SkillSnapshotPanel shows when version
+  // history comes back empty — never used to alter what `changed` itself
+  // displays (that stays verbatim, above, unconditionally).
+  const expectedAction: 'created' | 'upgraded' | null =
+    skillId && receipt.changed?.includes(`created skill ${skillId}`)
+      ? 'created'
+      : skillId && receipt.changed?.includes(`upgraded skill ${skillId}`)
+        ? 'upgraded'
+        : null
+
+  return (
+    <div className="activity-message__receipt">
+      <div className="activity-message__receipt-headline">{headline}</div>
+      {receipt.changed && (
+        <div className="activity-message__receipt-line">
+          <strong>Changed:</strong> {receipt.changed}
+        </div>
+      )}
+      {hasDetails && (
+        <>
+          <button type="button" className="activity-message__receipt-toggle" onClick={() => setExpanded((prev) => !prev)}>
+            {expanded ? 'Hide learning details ▲' : 'View learning details ▼'}
+          </button>
+          {expanded && (
+            <div className="activity-message__receipt-details">
+              {receipt.found && (
+                <div className="activity-message__receipt-line">
+                  <strong>Found:</strong> {receipt.found}
+                </div>
+              )}
+              {receipt.learned && (
+                <div className="activity-message__receipt-line">
+                  <strong>Learned:</strong> {receipt.learned}
+                </div>
+              )}
+              {receipt.why && (
+                <div className="activity-message__receipt-line">
+                  <strong>Why:</strong> {receipt.why}
+                </div>
+              )}
+              {receipt.source && (
+                <div className="activity-message__receipt-line">
+                  <strong>Source:</strong> {receipt.source}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {skillId && (
+        <>
+          <button type="button" className="activity-message__receipt-toggle" onClick={() => setSkillOpen((prev) => !prev)}>
+            {skillOpen ? 'Hide skill ▲' : 'View Updated Skill ▼'}
+          </button>
+          {skillOpen && <SkillSnapshotPanel skillId={skillId} expectedAction={expectedAction} />}
+        </>
+      )}
     </div>
   )
 }
@@ -245,34 +345,51 @@ export function ActivityPanel({
               <span>{online ? 'How can I assist you today?' : 'Waiting for MAT to come online.'}</span>
             </div>
           )}
-          {messages.map((message) => (
-            <div key={message.id} className={`activity-message activity-message--${message.role}`}>
-              {message.text}
-              {message.role === 'mat' && (
-                <span className="activity-message__actions">
-                  <button
-                    type="button"
-                    className="activity-message__copy"
-                    onClick={() => copyMessage(message.id, message.text)}
-                    aria-label="Copy response"
-                    title="Copy response"
-                  >
-                    {copiedId === message.id ? 'Copied' : '⧉'}
-                  </button>
-                  <button
-                    type="button"
-                    className={`activity-message__speak${speakingId === message.id ? ' is-speaking' : ''}`}
-                    onClick={() => onSpeak(message.id, message.text)}
-                    disabled={speakingId !== null && speakingId !== message.id}
-                    aria-label="Speak this reply"
-                    title="Speak this reply"
-                  >
-                    ▶
-                  </button>
-                </span>
-              )}
-            </div>
-          ))}
+          {messages.map((message) => {
+            // Copy stays available on a Learn receipt even when governance
+            // rejected/failed it (role 'system') -- everywhere else, Copy
+            // stays 'mat'-only, unchanged. Speak is never extended to
+            // system messages (unchanged from before this batch).
+            const canCopy = message.role === 'mat' || (message.role === 'system' && message.kind === 'learn')
+            const canSpeak = message.role === 'mat'
+            const copyText = message.receipt ? buildFullReceiptText(message.text, message.receipt) : message.text
+            return (
+              <div key={message.id} className={`activity-message activity-message--${message.role}`}>
+                {message.receipt ? (
+                  <LearnReceiptView headline={message.text} receipt={message.receipt} skillId={message.skillId} />
+                ) : (
+                  message.text
+                )}
+                {(canCopy || canSpeak) && (
+                  <span className="activity-message__actions">
+                    {canCopy && (
+                      <button
+                        type="button"
+                        className="activity-message__copy"
+                        onClick={() => copyMessage(message.id, copyText)}
+                        aria-label="Copy response"
+                        title="Copy response"
+                      >
+                        {copiedId === message.id ? 'Copied' : '⧉'}
+                      </button>
+                    )}
+                    {canSpeak && (
+                      <button
+                        type="button"
+                        className={`activity-message__speak${speakingId === message.id ? ' is-speaking' : ''}`}
+                        onClick={() => onSpeak(message.id, message.text)}
+                        disabled={speakingId !== null && speakingId !== message.id}
+                        aria-label="Speak this reply"
+                        title="Speak this reply"
+                      >
+                        ▶
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+            )
+          })}
           {activityKind && activityStartedAt && <PendingActivity kind={activityKind} startedAt={activityStartedAt} />}
         </div>
       </div>

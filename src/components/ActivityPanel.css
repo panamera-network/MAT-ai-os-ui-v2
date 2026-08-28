@@ -242,6 +242,53 @@
   font-variant-numeric: tabular-nums;
 }
 
+.activity-message__receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activity-message__receipt-headline {
+  font-weight: 600;
+}
+
+.activity-message__receipt-line {
+  font-size: calc(9px + var(--hud-font-boost));
+  line-height: 1.4;
+  color: var(--hud-text-muted);
+}
+
+.activity-message__receipt-line strong {
+  color: inherit;
+  font-weight: 600;
+}
+
+.activity-message__receipt-toggle {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--hud-cyan);
+  font-family: var(--hud-font-mono);
+  font-size: calc(8px + var(--hud-font-boost));
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.activity-message__receipt-toggle:hover {
+  color: var(--hud-text);
+}
+
+.activity-message__receipt-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(184, 163, 255, 0.18);
+}
+
 .activity-message__actions {
   display: inline-flex;
   align-items: center;

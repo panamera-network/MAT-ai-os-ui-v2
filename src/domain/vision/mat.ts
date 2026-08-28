@@ -92,6 +92,21 @@ export interface LearnRequest {
   context?: string
 }
 
+/**
+ * The Learning Receipt — `GovernanceLayer.evaluate()`'s own real
+ * found/learned/why/source, with `changed` filled in by the backend's
+ * `/learn` route only once the real apply outcome is known ("created skill
+ * X" / "upgraded skill Y" / "pending approval" / "rejected" / "failed").
+ * `changed` must always be rendered verbatim — never re-derived client-side.
+ */
+export interface LearnReceipt {
+  found: string | null
+  learned: string | null
+  changed: string | null
+  why: string | null
+  source: string
+}
+
 export interface LearnResult {
   /** "learned": actually applied to the skill registry. "pending_approval":
    * governance passed but the decision (a new domain) is consequential
@@ -103,6 +118,9 @@ export interface LearnResult {
   suggestion_id: string | null
   skill_id: string | null
   domain: string | null
+  /** `null` only for the earliest failure modes (content never fetched, no
+   * Body attached, governance unavailable) — no evaluation ever ran. */
+  receipt: LearnReceipt | null
 }
 
 /** One `LearnSuggestionManager` record's own real fields, trimmed for review
