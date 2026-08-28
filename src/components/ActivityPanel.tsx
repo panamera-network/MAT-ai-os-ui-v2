@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { LearnReceipt } from '../domain/vision'
+import type { LearnDecisionSummary, LearnReceipt } from '../domain/vision'
 import type { AttachedDocument, ChatMessage, DocumentAttachmentState, ThinkActivityKind } from '../hooks/useThink'
 import type { VoiceState } from '../hooks/useVoice'
 import { SkillSnapshotPanel } from './SkillSnapshotPanel'
@@ -96,21 +96,74 @@ function buildFullReceiptText(headline: string, receipt: LearnReceipt): string {
  * force its way into view. Every value here is rendered verbatim from the
  * backend — nothing here computes or guesses any of it.
  */
+const DECISION_BADGE_LABEL: Record<LearnDecisionSummary['status'], (action: LearnDecisionSummary['action']) => string> = {
+  applied: (action) => (action === 'improve' ? 'Upgraded' : 'Created'),
+  ignored: () => 'Ignored',
+  pending: () => 'Pending',
+  failed: () => 'Failed',
+  not_applied: () => 'Not applied',
+}
+
+/**
+ * One row in a multi-skill Learning Receipt — a single decision's real
+ * outcome (`LearnDecisionSummary`, structured, never parsed out of
+ * `changed`'s own text). `applied`/`failed` rows with a real `skill_id` get
+ * their own "View Skill" toggle (reusing `SkillSnapshotPanel` exactly like
+ * the single-skill case); `ignored`/`pending` rows have no registry entry to
+ * inspect yet, so they show only their status and reason.
+ */
+function SkillDecisionRow({ decision }: { decision: LearnDecisionSummary }) {
+  const [skillOpen, setSkillOpen] = useState(false)
+  const label = decision.name || decision.skill_id || decision.action || 'pattern'
+  const canViewSkill = Boolean(decision.skill_id) && (decision.status === 'applied' || decision.status === 'failed')
+  const expectedAction: 'created' | 'upgraded' | null =
+    decision.action === 'improve' ? 'upgraded' : decision.action === 'create' || decision.action === 'new_domain' ? 'created' : null
+
+  return (
+    <div className="activity-message__decision-row">
+      <div className="activity-message__decision-row-header">
+        <span className={`activity-message__decision-badge activity-message__decision-badge--${decision.status}`}>
+          {DECISION_BADGE_LABEL[decision.status](decision.action)}
+        </span>
+        <span className="activity-message__decision-row-label">{label}</span>
+      </div>
+      {decision.reason && decision.status !== 'applied' && (
+        <div className="activity-message__decision-row-reason">{decision.reason}</div>
+      )}
+      {canViewSkill && decision.skill_id && (
+        <>
+          <button type="button" className="activity-message__receipt-toggle" onClick={() => setSkillOpen((prev) => !prev)}>
+            {skillOpen ? 'Hide skill ▲' : 'View Skill ▼'}
+          </button>
+          {skillOpen && <SkillSnapshotPanel skillId={decision.skill_id} expectedAction={expectedAction} />}
+        </>
+      )}
+    </div>
+  )
+}
+
 function LearnReceiptView({
   headline,
   receipt,
   skillId,
+  decisions,
 }: {
   headline: string
   receipt: LearnReceipt
   /** `ChatMessage.skillId` — the one structurally-known applied skill for
    * this Learn result. Absent/null for a rejected/pending/failed result, or
-   * a Learn response with no receipt at all. */
+   * a Learn response with no receipt at all. Ignored when `decisions` (below)
+   * is present. */
   skillId?: string | null
+  /** `ChatMessage.decisions` — present only for a genuine multi-decision
+   * batch; renders one row per decision instead of the single skillId-based
+   * button. */
+  decisions?: LearnDecisionSummary[] | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const [skillOpen, setSkillOpen] = useState(false)
   const hasDetails = Boolean(receipt.found || receipt.learned || receipt.why || receipt.source)
+  const hasDecisions = Boolean(decisions && decisions.length > 0)
 
   // Derived ONLY to pick which message SkillSnapshotPanel shows when version
   // history comes back empty — never used to alter what `changed` itself
@@ -161,13 +214,22 @@ function LearnReceiptView({
           )}
         </>
       )}
-      {skillId && (
-        <>
-          <button type="button" className="activity-message__receipt-toggle" onClick={() => setSkillOpen((prev) => !prev)}>
-            {skillOpen ? 'Hide skill ▲' : 'View Updated Skill ▼'}
-          </button>
-          {skillOpen && <SkillSnapshotPanel skillId={skillId} expectedAction={expectedAction} />}
-        </>
+      {hasDecisions ? (
+        <div className="activity-message__decisions">
+          {decisions!.map((decision, index) => (
+            // No stable id of its own -- skill_id/action + index is fine (order never changes for a given message).
+            <SkillDecisionRow key={`${decision.skill_id ?? decision.action ?? 'pattern'}-${index}`} decision={decision} />
+          ))}
+        </div>
+      ) : (
+        skillId && (
+          <>
+            <button type="button" className="activity-message__receipt-toggle" onClick={() => setSkillOpen((prev) => !prev)}>
+              {skillOpen ? 'Hide skill ▲' : 'View Updated Skill ▼'}
+            </button>
+            {skillOpen && <SkillSnapshotPanel skillId={skillId} expectedAction={expectedAction} />}
+          </>
+        )
       )}
     </div>
   )
@@ -356,7 +418,12 @@ export function ActivityPanel({
             return (
               <div key={message.id} className={`activity-message activity-message--${message.role}`}>
                 {message.receipt ? (
-                  <LearnReceiptView headline={message.text} receipt={message.receipt} skillId={message.skillId} />
+                  <LearnReceiptView
+                    headline={message.text}
+                    receipt={message.receipt}
+                    skillId={message.skillId}
+                    decisions={message.decisions}
+                  />
                 ) : (
                   message.text
                 )}

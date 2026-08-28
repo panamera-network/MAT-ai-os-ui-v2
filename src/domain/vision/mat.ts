@@ -107,6 +107,25 @@ export interface LearnReceipt {
   source: string
 }
 
+/**
+ * One decision's real outcome from a multi-skill `/learn` batch — the SAME
+ * data `receipt.changed` already flattens into one string, structured
+ * instead so a "one row per skill" UI can iterate it directly. `status`:
+ * "applied" (created/upgraded a real skill), "ignored" (a per-pattern
+ * reject or batch-local dedup/cap drop — deliberately never registered),
+ * "pending" (a new_domain decision, always held for separate human
+ * review), "failed" (governance passed but this ONE apply raised), or
+ * "not_applied" (defensive fallback, should not occur in practice).
+ */
+export interface LearnDecisionSummary {
+  status: 'applied' | 'ignored' | 'pending' | 'failed' | 'not_applied'
+  action: 'create' | 'improve' | 'new_domain' | 'reject' | null
+  skill_id: string | null
+  domain: string | null
+  name: string | null
+  reason: string
+}
+
 export interface LearnResult {
   /** "learned": actually applied to the skill registry. "pending_approval":
    * governance passed but the decision (a new domain) is consequential
@@ -121,6 +140,10 @@ export interface LearnResult {
   /** `null` only for the earliest failure modes (content never fetched, no
    * Body attached, governance unavailable) — no evaluation ever ran. */
   receipt: LearnReceipt | null
+  /** Present only for a genuine multi-decision batch — `null`/absent for the
+   * common single-skill case, which keeps using `skill_id`/`domain` above
+   * unchanged. */
+  decisions?: LearnDecisionSummary[] | null
 }
 
 /** One `LearnSuggestionManager` record's own real fields, trimmed for review

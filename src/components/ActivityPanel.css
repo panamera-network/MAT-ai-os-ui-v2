@@ -289,6 +289,67 @@
   border-left: 1px solid rgba(184, 163, 255, 0.18);
 }
 
+.activity-message__decisions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.activity-message__decision-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid rgba(184, 163, 255, 0.14);
+  border-radius: 4px;
+}
+
+.activity-message__decision-row-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.activity-message__decision-badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  font-size: calc(7px + var(--hud-font-boost));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.activity-message__decision-badge--applied {
+  color: var(--hud-green);
+}
+
+.activity-message__decision-badge--pending {
+  color: var(--hud-amber);
+}
+
+.activity-message__decision-badge--failed {
+  color: var(--hud-red);
+}
+
+.activity-message__decision-badge--ignored,
+.activity-message__decision-badge--not_applied {
+  color: var(--hud-text-faint);
+}
+
+.activity-message__decision-row-label {
+  color: var(--hud-text);
+  font-size: calc(9px + var(--hud-font-boost));
+  font-weight: 600;
+}
+
+.activity-message__decision-row-reason {
+  color: var(--hud-text-faint);
+  font-size: calc(8px + var(--hud-font-boost));
+  line-height: 1.4;
+}
+
 .activity-message__actions {
   display: inline-flex;
   align-items: center;

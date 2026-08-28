@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useVisionApi } from '../app/VisionApiProvider'
 import { VisionApiError } from '../adapters/vision'
-import type { LearnReceipt, LearnResult } from '../domain/vision'
+import type { LearnDecisionSummary, LearnReceipt, LearnResult } from '../domain/vision'
 
 export interface AttachedDocument {
   filename: string
@@ -28,14 +28,16 @@ export interface ChatMessage {
   /** `LearnResult.skill_id`/`domain` verbatim — the ONE structurally-known
    * applied skill for this Learn result (present only when `status ===
    * 'learned'`). For a multi-skill batch this is the FIRST applied skill
-   * only (the receipt's own `changed` text may name more; only this one
-   * skill_id is reliably known well enough to build a "View Updated Skill"
-   * action against — see the Repo Deep Fetch/Multi-Skill audit for why a
-   * full per-skill list isn't available without a backend change). Absent
-   * (not even `null`) for every message that isn't a successful Learn
-   * result. */
+   * only; used as a fallback single-button path when `decisions` (below)
+   * isn't present. Absent (not even `null`) for every message that isn't a
+   * successful Learn result. */
   skillId?: string | null
   skillDomain?: string | null
+  /** `LearnResult.decisions` verbatim — present only for a genuine
+   * multi-decision batch. When present, the receipt renders one row per
+   * decision (each with its own View Skill/View Diff) INSTEAD of the
+   * single skillId-based button above. */
+  decisions?: LearnDecisionSummary[] | null
 }
 
 /** Which in-flight request `pending` refers to — a real, known fact (which
@@ -254,7 +256,10 @@ export function useThink(): UseThinkResult {
       const { text, receipt } = formatLearnResult(result)
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role, text, kind: 'learn', receipt, skillId: result.skill_id, skillDomain: result.domain },
+        {
+          id: crypto.randomUUID(), role, text, kind: 'learn', receipt,
+          skillId: result.skill_id, skillDomain: result.domain, decisions: result.decisions,
+        },
       ])
     } catch (err) {
       const detail = err instanceof VisionApiError ? err.detail : 'Something went wrong.'
