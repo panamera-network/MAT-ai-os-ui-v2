@@ -94,10 +94,21 @@
 }
 
 .glass-hud__detail {
+  /* Flex-centers the child instead of left/top 50% + translate(-50%,-50%) on
+     the wrapper itself: that approach shrink-wraps this wrapper to the
+     child's OWN percentage-based width (`.card-detail-overlay`'s
+     `width: min(560px, 88%)`), which is a genuine circular dependency (the
+     wrapper's size depends on the child's %, which depends on the wrapper's
+     size) — Chromium resolves it inconsistently, leaving the wrapper wider
+     than the child and the translate(-50%) centering the WRAPPER's box, not
+     the visible overlay inside it (observed live: the overlay rendered
+     ~26px left of true center). Spanning the full area and flex-centering
+     sidesteps the whole percentage/shrink-to-fit interaction. */
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: auto;
 }
 
