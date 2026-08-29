@@ -158,8 +158,8 @@ function LoopsDetail({ loops }: { loops: ReturnType<typeof useLoops> }) {
       {today && (
         <div className="card-detail-overlay__row card-detail-overlay__row--highlight">
           <span className="card-detail-overlay__row-primary">Today</span>
-          <span className="card-detail-overlay__row-meta">{today.completed} completed</span>
-          <span className="card-detail-overlay__row-meta">{today.failed} failed</span>
+          <span className="card-detail-overlay__row-meta">· {today.completed} completed</span>
+          <span className="card-detail-overlay__row-meta">· {today.failed} failed</span>
         </div>
       )}
       {list.length === 0 ? <EmptyRow>No loops configured.</EmptyRow> : <LoopsListBody list={list} />}
@@ -167,16 +167,50 @@ function LoopsDetail({ loops }: { loops: ReturnType<typeof useLoops> }) {
   )
 }
 
+/** `trigger === 'interval'`: `schedule` is a raw seconds count straight from
+ * `LoopsEngine` (`IntervalTrigger(seconds=float(schedule))` — confirmed in
+ * loops.py), never pre-formatted server-side, so this is the one place that
+ * turns it into "Every Nh/Nm/Ns" — the raw value itself is never altered,
+ * only ever read (see the row's own `title` attribute below, which still
+ * shows it verbatim on hover). `cron`/`event` schedules are shown verbatim
+ * too — decoding a cron expression into English risks silently
+ * misrepresenting the real schedule, which this phase's own "do not invent"
+ * rule out; a cron string is already a real, precise schedule as-is. */
+function formatSchedule(trigger: string, schedule: string): string {
+  if (trigger === 'interval') {
+    const seconds = Number(schedule)
+    if (Number.isFinite(seconds) && seconds > 0) {
+      if (seconds % 3600 === 0) return `Every ${seconds / 3600}h`
+      if (seconds % 60 === 0) return `Every ${seconds / 60}m`
+      return `Every ${seconds}s`
+    }
+    return `Every ${schedule}`
+  }
+  if (trigger === 'cron') return `Cron: ${schedule}`
+  return `On: ${schedule}`
+}
+
+/** "Attention first" using only what's real: `LoopsEngine`'s own two status
+ * values are "active"/"paused" (confirmed in loops.py) — there is no
+ * per-loop failed/health field anywhere in the real `Loop` shape, and
+ * `today.failed` is a global daily count with no per-loop attribution. A
+ * paused loop needing a human to re-enable it is the one genuine
+ * "needs attention" signal this data actually carries. */
+function loopPriority(status: string): number {
+  return status === 'paused' ? 0 : 1
+}
+
 function LoopsListBody({ list }: { list: NonNullable<ReturnType<typeof useLoops>['data']>['loops'] }) {
+  const sorted = [...list].sort((a, b) => loopPriority(a.status) - loopPriority(b.status))
   return (
     <div className="card-detail-overlay__list">
-      {list.map((loop) => (
+      {sorted.map((loop) => (
         <div key={loop.id} className="card-detail-overlay__row">
           <span className="card-detail-overlay__row-primary">{loop.name}</span>
           <span className={`card-detail-overlay__badge card-detail-overlay__badge--${loop.status === 'active' ? 'ok' : 'muted'}`}>{loop.status}</span>
-          <span className="card-detail-overlay__row-meta">{loop.trigger} · {loop.schedule}</span>
-          <span className="card-detail-overlay__row-meta">last: {formatWhen(loop.last_run)}</span>
-          <span className="card-detail-overlay__row-meta">{loop.run_count} run{loop.run_count === 1 ? '' : 's'}</span>
+          <span className="card-detail-overlay__row-meta" title={loop.schedule}>{formatSchedule(loop.trigger, loop.schedule)}</span>
+          <span className="card-detail-overlay__row-meta">Last run: {loop.last_run ? formatWhen(loop.last_run) : 'Never'}</span>
+          <span className="card-detail-overlay__row-meta">Runs: {loop.run_count}</span>
         </div>
       ))}
     </div>
