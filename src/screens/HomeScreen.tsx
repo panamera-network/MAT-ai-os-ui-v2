@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppShell } from '../components/AppShell'
 import { TopBar } from '../components/TopBar'
 import { ActiveCanvas, type ActiveCanvasView } from '../components/ActiveCanvas'
@@ -22,6 +22,19 @@ import { useSkills } from '../hooks/useSkills'
 import { useKnowledgeNotes } from '../hooks/useKnowledgeNotes'
 import { useBudget } from '../hooks/useBudget'
 import type { HudEvent, HudEventTone } from '../components/hudEvents'
+import { WORKFLOW_STATUS_LABEL, workflowBadgeTone } from '../components/CardDetailOverlay'
+import type { KnowledgeWorkflowStatus } from '../domain/vision'
+
+/** `workflowBadgeTone`'s 4-way tone (shared with Knowledge Notes/chat
+ * receipts) onto `HudEvent`'s own 4-way tone -- a reshape, not a remapping
+ * (same semantics: "ok" is the one genuinely-done state, "danger" needs
+ * attention, "warning" is in progress, everything else is informational). */
+function toHudEventTone(tone: 'ok' | 'warning' | 'danger' | 'muted'): HudEventTone {
+  if (tone === 'ok') return 'success'
+  if (tone === 'warning') return 'warning'
+  if (tone === 'danger') return 'danger'
+  return 'info'
+}
 
 /**
  * The one screen this HUD starts with: MAT presence as the Active Canvas
@@ -87,6 +100,41 @@ export function HomeScreen() {
       ...current,
     ].slice(0, 24))
   }, [])
+
+  // Practice/Sparring -> Validate phase: the backend's own analytics event
+  // log (`GET /events`, merged into Recent Events by `HudRightPanel`) only
+  // ever tracks the "reviewed" transition (`/learn`'s own confirm step) --
+  // practicing/validated/ready_for_promotion/needs_relearn/promoted have no
+  // backend event of their own (confirmed: no `track_event` call anywhere in
+  // `practice_knowledge_note`/`run_knowledge_practice_sweep`/
+  // `promote_knowledge_to_skill`). Rather than inventing a backend change for
+  // this, this diffs the SAME already-polled Knowledge Notes snapshot
+  // (`knowledgeNotes`, shared with the left panel/detail overlay) against its
+  // own previous tick, and turns each REAL observed workflow_status change
+  // into a Recent Events entry -- genuinely new information this session
+  // just saw, never a fabricated or backdated one (the first tick only seeds
+  // the baseline; nothing already sitting in a given state when this screen
+  // mounted gets announced). "reviewed" is skipped here on purpose -- the
+  // backend already announces that one.
+  const knowledgeStatusRef = useRef<Map<string, KnowledgeWorkflowStatus> | null>(null)
+  useEffect(() => {
+    const items = knowledgeNotes.data?.knowledge
+    if (!items) return
+    const previous = knowledgeStatusRef.current
+    if (previous) {
+      for (const item of items) {
+        const prevStatus = previous.get(item.id)
+        if (prevStatus && prevStatus !== item.workflow_status && item.workflow_status !== 'reviewed') {
+          const suffix = item.domain ? ` in ${item.domain}` : ''
+          addHudEvent(
+            `${WORKFLOW_STATUS_LABEL[item.workflow_status]} '${item.topic}'${suffix}`,
+            toHudEventTone(workflowBadgeTone(item.workflow_status)),
+          )
+        }
+      }
+    }
+    knowledgeStatusRef.current = new Map(items.map((item) => [item.id, item.workflow_status]))
+  }, [knowledgeNotes.data, addHudEvent])
 
   return (
     <AppShell
@@ -154,6 +202,7 @@ export function HomeScreen() {
           documentError={documentError}
           onAttachDocument={attachDocument}
           onRemoveDocument={removeDocument}
+          knowledgeItems={knowledgeNotes.data?.knowledge ?? []}
         />
       }
     >

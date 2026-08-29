@@ -932,7 +932,7 @@
   letter-spacing: 0.04em;
 }
 
-.hud-pending-learn-row__result--learned {
+.hud-pending-learn-row__result--reviewed {
   color: var(--hud-green);
 }
 

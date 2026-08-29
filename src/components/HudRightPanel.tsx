@@ -310,7 +310,7 @@ function PendingLearnRow({ suggestion, busy, lastResult, fetchDetail, onResolve 
           )}
           {result ? (
             <span className={`hud-pending-learn-row__result hud-pending-learn-row__result--${result.status}`}>
-              {result.status === 'learned' ? 'Learned.' : result.status === 'rejected' ? 'Rejected.' : `Failed — ${result.reason}`}
+              {result.status === 'reviewed' ? 'Reviewed — pending promotion.' : result.status === 'rejected' ? 'Rejected.' : `Failed — ${result.reason}`}
             </span>
           ) : (
             <div className="hud-pending-learn-row__actions">
@@ -328,12 +328,14 @@ function PendingLearnRow({ suggestion, busy, lastResult, fetchDetail, onResolve 
   )
 }
 
-/** `resolve`'s real result, one HUD event per resolution — 'learned' reads
- * as success, 'rejected' as a deliberate (not alarming) warning, anything
- * else (a real failure) as danger. Never fabricated: the message names the
- * exact real status `usePendingLearn` returned. */
+/** `resolve`'s real result, one HUD event per resolution — 'reviewed' (the
+ * approved decision's Knowledge Note cleared the mandatory gate — NOT yet a
+ * written skill) reads as success, 'rejected' as a deliberate (not
+ * alarming) warning, anything else (a real failure) as danger. Never
+ * fabricated: the message names the exact real status `usePendingLearn`
+ * returned. */
 function resultEventTone(status: string): HudEventTone {
-  if (status === 'learned') return 'success'
+  if (status === 'reviewed') return 'success'
   if (status === 'rejected') return 'warning'
   return 'danger'
 }
@@ -353,7 +355,7 @@ function PendingLearnCard({ onEvent }: { onEvent: AddHudEvent }) {
 
   useEffect(() => {
     if (!lastResult) return
-    const message = lastResult.status === 'learned'
+    const message = lastResult.status === 'reviewed'
       ? 'Learn suggestion approved'
       : lastResult.status === 'rejected'
         ? 'Learn suggestion rejected'

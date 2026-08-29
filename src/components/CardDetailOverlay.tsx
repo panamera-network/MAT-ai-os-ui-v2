@@ -426,7 +426,10 @@ function SkillsDetail({ skills }: { skills: ReturnType<typeof useSkills> }) {
   )
 }
 
-const WORKFLOW_STATUS_LABEL: Record<KnowledgeWorkflowStatus, string> = {
+/** Exported for reuse by `ActivityPanel`'s Learn Receipt rendering (chat) and
+ * `HomeScreen`'s Recent Events synthesis — same five user-facing states, one
+ * shared label/tone mapping so the two surfaces can never drift apart. */
+export const WORKFLOW_STATUS_LABEL: Record<KnowledgeWorkflowStatus, string> = {
   new: 'New',
   reviewed: 'Reviewed',
   practicing: 'Practicing',
@@ -437,7 +440,7 @@ const WORKFLOW_STATUS_LABEL: Record<KnowledgeWorkflowStatus, string> = {
   needs_relearn: 'Needs Relearn',
 }
 
-function workflowBadgeTone(status: KnowledgeWorkflowStatus): 'ok' | 'warning' | 'danger' | 'muted' {
+export function workflowBadgeTone(status: KnowledgeWorkflowStatus): 'ok' | 'warning' | 'danger' | 'muted' {
   if (status === 'ready_for_promotion' || status === 'promoted') return 'ok'
   if (status === 'needs_relearn') return 'danger'
   if (status === 'practicing') return 'warning'

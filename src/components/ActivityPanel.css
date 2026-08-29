@@ -321,20 +321,19 @@
   flex-shrink: 0;
 }
 
-.activity-message__decision-badge--applied {
+.activity-message__decision-badge--ok {
   color: var(--hud-green);
 }
 
-.activity-message__decision-badge--pending {
+.activity-message__decision-badge--warning {
   color: var(--hud-amber);
 }
 
-.activity-message__decision-badge--failed {
+.activity-message__decision-badge--danger {
   color: var(--hud-red);
 }
 
-.activity-message__decision-badge--ignored,
-.activity-message__decision-badge--not_applied {
+.activity-message__decision-badge--muted {
   color: var(--hud-text-faint);
 }
 

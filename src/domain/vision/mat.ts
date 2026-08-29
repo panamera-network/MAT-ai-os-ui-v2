@@ -111,32 +111,49 @@ export interface LearnReceipt {
  * One decision's real outcome from a multi-skill `/learn` batch — the SAME
  * data `receipt.changed` already flattens into one string, structured
  * instead so a "one row per skill" UI can iterate it directly. `status`:
- * "applied" (created/upgraded a real skill), "ignored" (a per-pattern
- * reject or batch-local dedup/cap drop — deliberately never registered),
- * "pending" (a new_domain decision, always held for separate human
- * review), "failed" (governance passed but this ONE apply raised), or
- * "not_applied" (defensive fallback, should not occur in practice).
+ * "reviewed" (its Knowledge Note cleared the mandatory gate — NOT yet a
+ * written skill; renamed from the old "applied", which stays retired),
+ * "ignored" (a per-pattern reject or batch-local dedup/cap drop —
+ * deliberately never registered), "pending" (a new_domain decision, always
+ * held for separate human review), "failed" (governance passed but this ONE
+ * apply raised), or "not_applied" (defensive fallback, should not occur in
+ * practice).
  */
 export interface LearnDecisionSummary {
-  status: 'applied' | 'ignored' | 'pending' | 'failed' | 'not_applied'
+  status: 'reviewed' | 'ignored' | 'pending' | 'failed' | 'not_applied'
   action: 'create' | 'improve' | 'new_domain' | 'reject' | null
   skill_id: string | null
   domain: string | null
   name: string | null
   reason: string
+  /** The Knowledge Note this "reviewed" outcome cleared — `null` for every
+   * other status. Use `POST /knowledge/{knowledge_id}/promote` (a human
+   * decision, never automatic) to find out whether/when it becomes a real
+   * skill; this alone never means one was written. */
+  knowledge_id: string | null
 }
 
 export interface LearnResult {
-  /** "learned": actually applied to the skill registry. "pending_approval":
-   * governance passed but the decision (a new domain) is consequential
-   * enough to hold as an unresolved suggestion. "rejected": failed
-   * security/quality/relevance. "failed": governance passed but applying it
-   * raised. */
-  status: 'learned' | 'pending_approval' | 'rejected' | 'failed'
+  /** "reviewed": governance passed and the decision's Knowledge Note reached
+   * the mandatory gate's "reviewed" workflow_status — NOT yet a written
+   * skill (renamed from the old "learned", which is retired: nothing is
+   * applied to the skill registry at confirm time anymore; see
+   * `knowledge_id` below and `POST /knowledge/{knowledge_id}/promote`, the
+   * one remaining path that writes a skill). "pending_approval": governance
+   * passed but the decision (a new domain) is consequential enough to hold
+   * as an unresolved suggestion. "rejected": failed security/quality/
+   * relevance. "failed": governance passed but applying it raised. */
+  status: 'reviewed' | 'pending_approval' | 'rejected' | 'failed'
   reason: string
   suggestion_id: string | null
+  /** The PROPOSED skill this decision targets — not yet written to the
+   * registry. */
   skill_id: string | null
   domain: string | null
+  /** Mandatory Knowledge Note gate: the note this `status === "reviewed"`
+   * outcome cleared — `null` for every other status. The single-decision
+   * case's own counterpart to `decisions[].knowledge_id` above. */
+  knowledge_id: string | null
   /** `null` only for the earliest failure modes (content never fetched, no
    * Body attached, governance unavailable) — no evaluation ever ran. */
   receipt: LearnReceipt | null

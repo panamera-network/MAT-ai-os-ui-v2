@@ -21,22 +21,30 @@ export interface ChatMessage {
   kind?: 'learn'
   /** Present only for a Learn result that carries a real backend receipt —
    * `text` stays just the short status headline in that case (e.g.
-   * "✅ Learned"); the receipt's own fields carry the rest. Absent entirely
+   * "📝 Reviewed"); the receipt's own fields carry the rest. Absent entirely
    * (not even `null`) for every other message, and for a Learn result with
    * no receipt — the old flat `text`-only rendering is the fallback. */
   receipt?: LearnReceipt
-  /** `LearnResult.skill_id`/`domain` verbatim — the ONE structurally-known
-   * applied skill for this Learn result (present only when `status ===
-   * 'learned'`). For a multi-skill batch this is the FIRST applied skill
-   * only; used as a fallback single-button path when `decisions` (below)
-   * isn't present. Absent (not even `null`) for every message that isn't a
-   * successful Learn result. */
+  /** `LearnResult.skill_id`/`domain` verbatim — the PROPOSED skill target
+   * for this Learn result (present only when `status === 'reviewed'`) — not
+   * yet written to the registry; see `knowledgeId` below for the one way to
+   * find out if/when it actually is. For a multi-skill batch this is the
+   * FIRST decision's target only; real per-decision detail lives in
+   * `decisions`. Absent (not even `null`) for every message that isn't a
+   * reviewed Learn result. */
   skillId?: string | null
   skillDomain?: string | null
+  /** `LearnResult.knowledge_id` verbatim — the Knowledge Note this Learn
+   * result's gate outcome produced (present only when `status ===
+   * 'reviewed'`). `ActivityPanel` cross-references this against the live-
+   * polled Knowledge Notes list (never this message's own frozen-at-send-
+   * time data) to show the note's CURRENT workflow state, and only reveals
+   * View Skill/View Diff once that note has actually reached "promoted". */
+  knowledgeId?: string | null
   /** `LearnResult.decisions` verbatim — present only for a genuine
    * multi-decision batch. When present, the receipt renders one row per
-   * decision (each with its own View Skill/View Diff) INSTEAD of the
-   * single skillId-based button above. */
+   * decision (each with its own `knowledge_id`-driven live status) INSTEAD
+   * of the single skillId/knowledgeId-based path above. */
   decisions?: LearnDecisionSummary[] | null
 }
 
@@ -98,17 +106,23 @@ interface UseThinkResult {
   reset: () => void
 }
 
+/** Mandatory Knowledge Note gate: "reviewed" means the gate passed, NOT that
+ * a skill was created/upgraded/learned — that only ever happens later, via a
+ * human `POST /knowledge/{id}/promote` (see `ChatMessage.knowledgeId`). The
+ * label says exactly that and nothing more; `receipt.changed` (backend text,
+ * rendered verbatim) carries the honest "reviewed, pending promotion: X"
+ * detail. */
 const LEARN_STATUS_LABEL: Record<LearnResult['status'], string> = {
-  learned: '✅ Learned',
+  reviewed: '📝 Reviewed',
   pending_approval: '⏳ Pending approval',
   rejected: 'Learn rejected',
   failed: 'Learn failed',
 }
 
-/** `text` is always the short status headline ("✅ Learned", never the
+/** `text` is always the short status headline ("📝 Reviewed", never the
  * skill_id/domain/reason parenthetical the old fallback-only shape used) --
- * the real detail lives in `receipt` (`changed` already says "created skill
- * X"/"upgraded skill Y"). `receipt` is omitted entirely (not `null`) when
+ * the real detail lives in `receipt` (`changed` already says "reviewed,
+ * pending promotion: X"). `receipt` is omitted entirely (not `null`) when
  * the backend didn't send one, so the old flat text -- skill_id/domain/
  * reason folded into one line, exactly as before this batch -- is the
  * fallback for that case only. */
@@ -258,7 +272,7 @@ export function useThink(): UseThinkResult {
         ...prev,
         {
           id: crypto.randomUUID(), role, text, kind: 'learn', receipt,
-          skillId: result.skill_id, skillDomain: result.domain, decisions: result.decisions,
+          skillId: result.skill_id, skillDomain: result.domain, knowledgeId: result.knowledge_id, decisions: result.decisions,
         },
       ])
     } catch (err) {

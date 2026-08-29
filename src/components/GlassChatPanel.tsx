@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ActivityPanel } from './ActivityPanel'
 import type { AttachedDocument, ChatMessage, DocumentAttachmentState, ThinkActivityKind } from '../hooks/useThink'
 import type { VoiceState } from '../hooks/useVoice'
+import type { KnowledgeItem } from '../domain/vision'
 import './GlassChatPanel.css'
 
 interface GlassChatPanelProps {
@@ -25,6 +26,7 @@ interface GlassChatPanelProps {
   documentError: string | null
   onAttachDocument: (file: File) => void
   onRemoveDocument: () => void
+  knowledgeItems: KnowledgeItem[]
 }
 
 /** Bottom-center chat, anchored to the bottom and expanding upward. */

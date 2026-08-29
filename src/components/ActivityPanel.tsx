@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { LearnDecisionSummary, LearnReceipt } from '../domain/vision'
+import type { KnowledgeItem, LearnDecisionSummary, LearnReceipt } from '../domain/vision'
 import type { AttachedDocument, ChatMessage, DocumentAttachmentState, ThinkActivityKind } from '../hooks/useThink'
 import type { VoiceState } from '../hooks/useVoice'
 import { SkillSnapshotPanel } from './SkillSnapshotPanel'
+import { WORKFLOW_STATUS_LABEL, workflowBadgeTone } from './CardDetailOverlay'
 import './ActivityPanel.css'
 
 interface ActivityPanelProps {
@@ -26,6 +27,14 @@ interface ActivityPanelProps {
   documentError: string | null
   onAttachDocument: (file: File) => void
   onRemoveDocument: () => void
+  /** The same live-polled `GET /knowledge` snapshot `HudLeftPanel`/
+   * `CardDetailOverlay` already show (`useKnowledgeNotes()`, lifted in
+   * `HomeScreen`) — never a second fetch of this component's own. A Learn
+   * receipt's `knowledgeId` is looked up here so the chat bubble always
+   * reflects a note's CURRENT workflow state (it may have moved on to
+   * practicing/promoted since the message was created), not the status
+   * frozen at the moment `/learn` returned. */
+  knowledgeItems: KnowledgeItem[]
 }
 
 /** One truthful label per real in-flight request kind — never a simulated
@@ -88,6 +97,47 @@ function buildFullReceiptText(headline: string, receipt: LearnReceipt): string {
   return lines.join('\n')
 }
 
+/** A "reviewed" decision's own knowledge note, looked up by id in the live
+ * poll — `undefined` until the next Knowledge Notes poll tick catches up
+ * (never a guess at its state in the meantime). Every other decision status
+ * has no knowledge note to look up at all (`knowledge_id` is only ever set
+ * on "reviewed"). */
+function findKnowledgeNote(knowledgeId: string | null | undefined, knowledgeItems: KnowledgeItem[]): KnowledgeItem | undefined {
+  if (!knowledgeId) return undefined
+  return knowledgeItems.find((item) => item.id === knowledgeId)
+}
+
+/** Only meaningful once a note has actually reached "promoted" — the skill
+ * registry write itself (`promote_knowledge_to_skill`) is the only place
+ * that decides create vs. improve, so this reads the note's own recorded
+ * `skill_payload.action`, never re-derived from receipt text. */
+function knowledgeExpectedAction(note: KnowledgeItem | undefined): 'created' | 'upgraded' | null {
+  const action = note?.skill_payload?.action
+  if (action === 'improve') return 'upgraded'
+  if (action === 'create' || action === 'new_domain') return 'created'
+  return null
+}
+
+/** Static label/tone for a decision with no knowledge note to look up yet —
+ * either it's not "reviewed" at all (ignored/pending/failed/not_applied), or
+ * it is but the next Knowledge Notes poll tick hasn't caught up. "reviewed"
+ * intentionally shares `workflowBadgeTone`'s own "muted" for a freshly
+ * reviewed note (see `CardDetailOverlay.tsx`) — clearing the gate is real,
+ * but never rendered as the "done" green reserved for ready/promoted. */
+const DECISION_STATUS_LABEL: Record<LearnDecisionSummary['status'], string> = {
+  reviewed: 'Reviewed',
+  ignored: 'Ignored',
+  pending: 'Pending',
+  failed: 'Failed',
+  not_applied: 'Not applied',
+}
+
+function decisionFallbackTone(status: LearnDecisionSummary['status']): 'ok' | 'warning' | 'danger' | 'muted' {
+  if (status === 'pending') return 'warning'
+  if (status === 'failed') return 'danger'
+  return 'muted'
+}
+
 /**
  * Compact Learning Receipt — `headline` (the short status line) plus
  * `changed` shown inline (the one fact users most want at a glance, in the
@@ -96,46 +146,40 @@ function buildFullReceiptText(headline: string, receipt: LearnReceipt): string {
  * force its way into view. Every value here is rendered verbatim from the
  * backend — nothing here computes or guesses any of it.
  */
-const DECISION_BADGE_LABEL: Record<LearnDecisionSummary['status'], (action: LearnDecisionSummary['action']) => string> = {
-  applied: (action) => (action === 'improve' ? 'Upgraded' : 'Created'),
-  ignored: () => 'Ignored',
-  pending: () => 'Pending',
-  failed: () => 'Failed',
-  not_applied: () => 'Not applied',
-}
 
 /**
  * One row in a multi-skill Learning Receipt — a single decision's real
  * outcome (`LearnDecisionSummary`, structured, never parsed out of
- * `changed`'s own text). `applied`/`failed` rows with a real `skill_id` get
- * their own "View Skill" toggle (reusing `SkillSnapshotPanel` exactly like
- * the single-skill case); `ignored`/`pending` rows have no registry entry to
- * inspect yet, so they show only their status and reason.
+ * `changed`'s own text). A "reviewed" row with a `knowledge_id` shows that
+ * note's CURRENT live workflow_status (Reviewed/Practicing/Ready for
+ * Promotion/Needs Relearn/Promoted) instead of its frozen-at-send-time
+ * status — "View Skill" only ever appears once that note has actually
+ * reached "promoted". `ignored`/`pending`/`failed`/`not_applied` rows have no
+ * knowledge note at all, so they show only their static status and reason.
  */
-function SkillDecisionRow({ decision }: { decision: LearnDecisionSummary }) {
+function SkillDecisionRow({ decision, knowledgeItems }: { decision: LearnDecisionSummary; knowledgeItems: KnowledgeItem[] }) {
   const [skillOpen, setSkillOpen] = useState(false)
   const label = decision.name || decision.skill_id || decision.action || 'pattern'
-  const canViewSkill = Boolean(decision.skill_id) && (decision.status === 'applied' || decision.status === 'failed')
-  const expectedAction: 'created' | 'upgraded' | null =
-    decision.action === 'improve' ? 'upgraded' : decision.action === 'create' || decision.action === 'new_domain' ? 'created' : null
+  const note = decision.status === 'reviewed' ? findKnowledgeNote(decision.knowledge_id, knowledgeItems) : undefined
+  const tone = note ? workflowBadgeTone(note.workflow_status) : decisionFallbackTone(decision.status)
+  const badgeLabel = note ? WORKFLOW_STATUS_LABEL[note.workflow_status] : DECISION_STATUS_LABEL[decision.status]
+  const promoted = note?.workflow_status === 'promoted'
+  const expectedAction = knowledgeExpectedAction(note)
+  const reason = note ? (note.workflow_status === 'needs_relearn' ? note.workflow_reason : null) : decision.reason
 
   return (
     <div className="activity-message__decision-row">
       <div className="activity-message__decision-row-header">
-        <span className={`activity-message__decision-badge activity-message__decision-badge--${decision.status}`}>
-          {DECISION_BADGE_LABEL[decision.status](decision.action)}
-        </span>
+        <span className={`activity-message__decision-badge activity-message__decision-badge--${tone}`}>{badgeLabel}</span>
         <span className="activity-message__decision-row-label">{label}</span>
       </div>
-      {decision.reason && decision.status !== 'applied' && (
-        <div className="activity-message__decision-row-reason">{decision.reason}</div>
-      )}
-      {canViewSkill && decision.skill_id && (
+      {reason && <div className="activity-message__decision-row-reason">{reason}</div>}
+      {promoted && note?.promoted_skill_id && (
         <>
           <button type="button" className="activity-message__receipt-toggle" onClick={() => setSkillOpen((prev) => !prev)}>
             {skillOpen ? 'Hide skill ▲' : 'View Skill ▼'}
           </button>
-          {skillOpen && <SkillSnapshotPanel skillId={decision.skill_id} expectedAction={expectedAction} />}
+          {skillOpen && <SkillSnapshotPanel skillId={note.promoted_skill_id} expectedAction={expectedAction} />}
         </>
       )}
     </div>
@@ -145,35 +189,33 @@ function SkillDecisionRow({ decision }: { decision: LearnDecisionSummary }) {
 function LearnReceiptView({
   headline,
   receipt,
-  skillId,
+  knowledgeId,
   decisions,
+  knowledgeItems,
 }: {
   headline: string
   receipt: LearnReceipt
-  /** `ChatMessage.skillId` — the one structurally-known applied skill for
-   * this Learn result. Absent/null for a rejected/pending/failed result, or
-   * a Learn response with no receipt at all. Ignored when `decisions` (below)
+  /** `ChatMessage.knowledgeId` — the Knowledge Note this Learn result's gate
+   * outcome produced. Absent/null for a rejected/pending/failed result, or a
+   * Learn response with no receipt at all. Ignored when `decisions` (below)
    * is present. */
-  skillId?: string | null
+  knowledgeId?: string | null
   /** `ChatMessage.decisions` — present only for a genuine multi-decision
-   * batch; renders one row per decision instead of the single skillId-based
-   * button. */
+   * batch; renders one row per decision instead of the single
+   * knowledgeId-based path below. */
   decisions?: LearnDecisionSummary[] | null
+  knowledgeItems: KnowledgeItem[]
 }) {
   const [expanded, setExpanded] = useState(false)
   const [skillOpen, setSkillOpen] = useState(false)
   const hasDetails = Boolean(receipt.found || receipt.learned || receipt.why || receipt.source)
   const hasDecisions = Boolean(decisions && decisions.length > 0)
 
-  // Derived ONLY to pick which message SkillSnapshotPanel shows when version
-  // history comes back empty — never used to alter what `changed` itself
-  // displays (that stays verbatim, above, unconditionally).
-  const expectedAction: 'created' | 'upgraded' | null =
-    skillId && receipt.changed?.includes(`created skill ${skillId}`)
-      ? 'created'
-      : skillId && receipt.changed?.includes(`upgraded skill ${skillId}`)
-        ? 'upgraded'
-        : null
+  // Single-decision path only — a genuine multi-decision batch looks each
+  // one up individually inside `SkillDecisionRow` instead.
+  const note = hasDecisions ? undefined : findKnowledgeNote(knowledgeId, knowledgeItems)
+  const promoted = note?.workflow_status === 'promoted'
+  const expectedAction = knowledgeExpectedAction(note)
 
   return (
     <div className="activity-message__receipt">
@@ -218,18 +260,34 @@ function LearnReceiptView({
         <div className="activity-message__decisions">
           {decisions!.map((decision, index) => (
             // No stable id of its own -- skill_id/action + index is fine (order never changes for a given message).
-            <SkillDecisionRow key={`${decision.skill_id ?? decision.action ?? 'pattern'}-${index}`} decision={decision} />
+            <SkillDecisionRow
+              key={`${decision.skill_id ?? decision.action ?? 'pattern'}-${index}`}
+              decision={decision}
+              knowledgeItems={knowledgeItems}
+            />
           ))}
         </div>
       ) : (
-        skillId && (
+        note && (
           <>
-            <button type="button" className="activity-message__receipt-toggle" onClick={() => setSkillOpen((prev) => !prev)}>
-              {skillOpen ? 'Hide skill ▲' : 'View Updated Skill ▼'}
-            </button>
-            {skillOpen && <SkillSnapshotPanel skillId={skillId} expectedAction={expectedAction} />}
+            <div className="activity-message__decision-row-header">
+              <span className={`activity-message__decision-badge activity-message__decision-badge--${workflowBadgeTone(note.workflow_status)}`}>
+                {WORKFLOW_STATUS_LABEL[note.workflow_status]}
+              </span>
+            </div>
+            {note.workflow_status === 'needs_relearn' && note.workflow_reason && (
+              <div className="activity-message__decision-row-reason">{note.workflow_reason}</div>
+            )}
           </>
         )
+      )}
+      {!hasDecisions && promoted && note?.promoted_skill_id && (
+        <>
+          <button type="button" className="activity-message__receipt-toggle" onClick={() => setSkillOpen((prev) => !prev)}>
+            {skillOpen ? 'Hide skill ▲' : 'View Skill ▼'}
+          </button>
+          {skillOpen && <SkillSnapshotPanel skillId={note.promoted_skill_id} expectedAction={expectedAction} />}
+        </>
       )}
     </div>
   )
@@ -262,6 +320,7 @@ export function ActivityPanel({
   documentError,
   onAttachDocument,
   onRemoveDocument,
+  knowledgeItems,
 }: ActivityPanelProps) {
   const [input, setInput] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
@@ -421,8 +480,9 @@ export function ActivityPanel({
                   <LearnReceiptView
                     headline={message.text}
                     receipt={message.receipt}
-                    skillId={message.skillId}
+                    knowledgeId={message.knowledgeId}
                     decisions={message.decisions}
+                    knowledgeItems={knowledgeItems}
                   />
                 ) : (
                   message.text
