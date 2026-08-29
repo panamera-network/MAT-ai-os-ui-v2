@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useVisionApi } from '../app/VisionApiProvider'
 import { VisionApiError } from '../adapters/vision'
 import type { LearnDecisionSummary, LearnReceipt, LearnResult } from '../domain/vision'
@@ -15,10 +15,12 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'mat' | 'system'
   text: string
-  /** Marks a Learn request/result pair — excluded from `buildContext()`
-   * regardless of role, since Learn is a distinct action from normal chat,
-   * never something MAT "said" in conversation (see `sendLearn` below). */
-  kind?: 'learn'
+  /** Marks a Learn request/result pair, or a Knowledge Note transition
+   * notice (see `notifyKnowledgeTransition` below) — both excluded from
+   * `buildContext()` regardless of role (`role: 'system'` already excludes
+   * them there on its own), since neither is organic conversation MAT ever
+   * "said" or "heard". */
+  kind?: 'learn' | 'knowledge-notice'
   /** Present only for a Learn result that carries a real backend receipt —
    * `text` stays just the short status headline in that case (e.g.
    * "📝 Reviewed"); the receipt's own fields carry the rest. Absent entirely
@@ -104,6 +106,13 @@ interface UseThinkResult {
    * MAT's own skill registry, not in this component's state, so it's
    * untouched by this. */
   reset: () => void
+  /** Companion notice for a Knowledge Note transition observed elsewhere
+   * (`HomeScreen`'s own transition-diff over the polled Knowledge Notes
+   * list — this function only ever appends the message it's given, it never
+   * decides WHEN one is warranted or de-dupes calls itself). Appears in the
+   * current chat stream as a subtle system notice, never a forced popup and
+   * never an automatic promotion/action of its own. */
+  notifyKnowledgeTransition: (text: string) => void
 }
 
 /** Mandatory Knowledge Note gate: "reviewed" means the gate passed, NOT that
@@ -312,6 +321,16 @@ export function useThink(): UseThinkResult {
     removeDocument()
   }
 
+  // Stable identity (unlike every other function this hook returns, which
+  // are cheap to redefine per-render since nothing depends on their
+  // identity) -- `HomeScreen`'s own transition-diff effect depends on this
+  // one directly, and an unstable reference would re-run that effect (and
+  // its `knowledgeStatusRef` bookkeeping) on every unrelated render instead
+  // of only when the polled Knowledge Notes data itself actually changes.
+  const notifyKnowledgeTransition = useCallback((text: string) => {
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'system', text, kind: 'knowledge-notice' }])
+  }, [])
+
   return {
     messages,
     pending,
@@ -326,5 +345,6 @@ export function useThink(): UseThinkResult {
     attachDocument,
     removeDocument,
     reset,
+    notifyKnowledgeTransition,
   }
 }

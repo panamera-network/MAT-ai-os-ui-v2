@@ -474,8 +474,12 @@ export function ActivityPanel({
             const canCopy = message.role === 'mat' || (message.role === 'system' && message.kind === 'learn')
             const canSpeak = message.role === 'mat'
             const copyText = message.receipt ? buildFullReceiptText(message.text, message.receipt) : message.text
+            // A Knowledge Note transition notice is a companion aside, not
+            // an error -- it never takes the red `--system` treatment
+            // (reserved for real failures), just its own subtle style.
+            const roleClass = message.kind === 'knowledge-notice' ? 'notice' : message.role
             return (
-              <div key={message.id} className={`activity-message activity-message--${message.role}`}>
+              <div key={message.id} className={`activity-message activity-message--${roleClass}`}>
                 {message.receipt ? (
                   <LearnReceiptView
                     headline={message.text}

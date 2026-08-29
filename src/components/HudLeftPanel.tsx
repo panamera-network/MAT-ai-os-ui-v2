@@ -240,13 +240,22 @@ interface InfoCardProps {
    * tone below, never a substitute for it. `false`/omitted when the
    * resource isn't ready, so this never flashes ahead of real data. */
   attention?: boolean
+  /** Which glow color `dataAttention` gets — 'amber' (default, matches
+   * every other card's existing attention treatment unchanged) or 'danger'
+   * for a card-specific state that's more than a routine heads-up (e.g.
+   * Knowledge Notes' own Needs Relearn count). Ignored for the
+   * connectivity-derived degraded/error case above, which always stays
+   * amber regardless. */
+  attentionTone?: 'amber' | 'danger'
 }
 
-function InfoCard({ id, accent, icon, title, mainLabel, mainValue, trendValue, metrics, state, lastUpdated, onSelect, attention: dataAttention }: InfoCardProps) {
+function InfoCard({ id, accent, icon, title, mainLabel, mainValue, trendValue, metrics, state, lastUpdated, onSelect, attention: dataAttention, attentionTone = 'amber' }: InfoCardProps) {
   const isReady = state.tone === 'ready'
   const trend = useTrend(isReady ? trendValue : null)
   const updated = formatRelativeTime(lastUpdated)
-  const attention = state.tone === 'degraded' || state.tone === 'error' || Boolean(dataAttention)
+  const isConnectivityAttention = state.tone === 'degraded' || state.tone === 'error'
+  const attention = isConnectivityAttention || Boolean(dataAttention)
+  const isDangerAttention = !isConnectivityAttention && Boolean(dataAttention) && attentionTone === 'danger'
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -257,7 +266,7 @@ function InfoCard({ id, accent, icon, title, mainLabel, mainValue, trendValue, m
 
   return (
     <section
-      className={`hud-left-panel__card hud-left-panel__card--${accent}${attention ? ' is-attention' : ''}`}
+      className={`hud-left-panel__card hud-left-panel__card--${accent}${attention ? ` is-attention${isDangerAttention ? ' is-attention-danger' : ''}` : ''}`}
       role="button"
       tabIndex={0}
       onClick={() => onSelect(id)}
@@ -464,6 +473,7 @@ export function HudLeftPanel({ agents, loops, models, governance, mcp, skills, k
         lastUpdated={knowledgeNotes.lastUpdated}
         onSelect={onSelect}
         attention={knowledgeState.tone === 'ready' && (knowledgeCounts.readyForPromotion > 0 || knowledgeCounts.needsRelearn > 0)}
+        attentionTone={knowledgeCounts.needsRelearn > 0 ? 'danger' : 'amber'}
       />
     </div>
   )

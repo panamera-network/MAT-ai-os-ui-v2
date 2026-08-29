@@ -86,17 +86,22 @@ export function HomeScreen() {
     attachDocument,
     removeDocument,
     reset,
+    notifyKnowledgeTransition,
   } = useThink()
   const { voiceState, voiceError, startRecording, stopRecording } = useVoice(send)
   const { speakingId, speak } = useSpeak()
   const [hudEvents, setHudEvents] = useState<HudEvent[]>([])
-  const eventSequence = useRef(0)
 
+  // `crypto.randomUUID()` (same scheme `ChatMessage.id` already uses) --
+  // collision-proof regardless of how many events land in one tick or one
+  // React StrictMode double-invocation, unlike a timestamp+ref-counter pair
+  // computed outside the updater (a real `key` collision was observed in
+  // dev with that scheme once two knowledge-transition events landed in the
+  // same effect pass).
   const addHudEvent = useCallback((message: string, tone: HudEventTone = 'info') => {
-    eventSequence.current += 1
     const timestamp = Date.now()
     setHudEvents((current) => [
-      { id: `${timestamp}-${eventSequence.current}`, timestamp, message, tone },
+      { id: crypto.randomUUID(), timestamp, message, tone },
       ...current,
     ].slice(0, 24))
   }, [])
@@ -124,17 +129,40 @@ export function HomeScreen() {
     if (previous) {
       for (const item of items) {
         const prevStatus = previous.get(item.id)
-        if (prevStatus && prevStatus !== item.workflow_status && item.workflow_status !== 'reviewed') {
-          const suffix = item.domain ? ` in ${item.domain}` : ''
+        if (!prevStatus || prevStatus === item.workflow_status || item.workflow_status === 'reviewed') continue
+
+        // Knowledge Note transition attention pass: `practicing ->
+        // ready_for_promotion`/`practicing -> needs_relearn` specifically —
+        // the two edges where a human actually needs to do something next
+        // (approve a promotion, or re-teach a failed note). These get their
+        // own event wording (no domain suffix — the chat notice below names
+        // the same note by topic alone) AND a one-shot chat companion
+        // notice; every other real transition (e.g. reviewed -> practicing,
+        // or -> promoted) keeps the general log entry it already had, so
+        // this is additive, never a second event for the same edge.
+        if (prevStatus === 'practicing' && (item.workflow_status === 'ready_for_promotion' || item.workflow_status === 'needs_relearn')) {
+          const isReady = item.workflow_status === 'ready_for_promotion'
           addHudEvent(
-            `${WORKFLOW_STATUS_LABEL[item.workflow_status]} '${item.topic}'${suffix}`,
+            `${isReady ? 'Ready for Promotion' : 'Needs Relearn'}: ${item.topic}`,
             toHudEventTone(workflowBadgeTone(item.workflow_status)),
           )
+          notifyKnowledgeTransition(
+            isReady
+              ? `Knowledge Note "${item.topic}" is ready for your approval.`
+              : `Practice for "${item.topic}" failed — relearn required.`,
+          )
+          continue
         }
+
+        const suffix = item.domain ? ` in ${item.domain}` : ''
+        addHudEvent(
+          `${WORKFLOW_STATUS_LABEL[item.workflow_status]} '${item.topic}'${suffix}`,
+          toHudEventTone(workflowBadgeTone(item.workflow_status)),
+        )
       }
     }
     knowledgeStatusRef.current = new Map(items.map((item) => [item.id, item.workflow_status]))
-  }, [knowledgeNotes.data, addHudEvent])
+  }, [knowledgeNotes.data, addHudEvent, notifyKnowledgeTransition])
 
   return (
     <AppShell

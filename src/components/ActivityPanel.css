@@ -387,6 +387,16 @@
   font-size: calc(10px + var(--hud-font-boost-secondary));
 }
 
+/* Knowledge Note transition companion notice -- a calm aside, never an
+   error, so it deliberately does not reuse `--system`'s red treatment. */
+.activity-message--notice {
+  align-self: center;
+  background: transparent;
+  border: 1px solid rgba(184, 163, 255, 0.22);
+  color: var(--hud-text-muted);
+  font-size: calc(9px + var(--hud-font-boost-secondary));
+}
+
 .activity-message__speak {
   display: inline-flex;
   align-items: center;
