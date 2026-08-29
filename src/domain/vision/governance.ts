@@ -53,8 +53,17 @@ export interface GuardrailBlockEvent {
 }
 
 /** `LearningAnalytics.get_stats()`'s own real fields, verbatim — the
- * commonly-populated subset this UI actually renders. */
+ * commonly-populated subset this UI actually renders. Mandatory Knowledge
+ * Note gate: `total_skills_learned`/`total_improved`/`total_approved` are
+ * all dead counters today — no real `track_event()` call site anywhere
+ * tracks "learned"/"improved"/"approved" anymore (confirmed against every
+ * call site in api/app.py and governance.py), so these only ever hold
+ * whatever count existed before that rename. `total_reviewed` is the real,
+ * currently-live successor (folds "learned" in for historical continuity —
+ * see `get_stats()`'s own comment); `total_rejected`/`total_discarded` were
+ * never renamed and stay genuinely live. */
 export interface LearningStats {
+  total_reviewed?: number
   total_skills_learned?: number
   total_improved?: number
   total_rejected?: number

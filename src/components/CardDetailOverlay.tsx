@@ -301,12 +301,19 @@ function GovernanceDetail({ governance }: { governance: ReturnType<typeof useGov
   const laws = governance.data?.laws.active_laws ?? []
   const blocked = governance.data?.blocked_today ?? []
   const warnings = governance.data?.warnings_today ?? []
+  const rulesTriggeredToday = governance.data?.rules_triggered_today
   const learning = governance.data?.learning_stats
   return (
     <>
+      {typeof rulesTriggeredToday === 'number' && (
+        <div className="card-detail-overlay__row card-detail-overlay__row--highlight">
+          <span className="card-detail-overlay__row-primary">Rules triggered today</span>
+          <span className="card-detail-overlay__row-meta">{rulesTriggeredToday}</span>
+        </div>
+      )}
       {(blocked.length > 0 || warnings.length > 0) && (
         <>
-          <h3 className="card-detail-overlay__section-title">Blocked today</h3>
+          <h3 className="card-detail-overlay__section-title">Blocked today · {blocked.length}</h3>
           {blocked.length === 0 ? (
             <EmptyRow>Nothing blocked today.</EmptyRow>
           ) : (
@@ -320,7 +327,7 @@ function GovernanceDetail({ governance }: { governance: ReturnType<typeof useGov
               ))}
             </div>
           )}
-          <h3 className="card-detail-overlay__section-title">Warnings today</h3>
+          <h3 className="card-detail-overlay__section-title">Warnings today · {warnings.length}</h3>
           {warnings.length === 0 ? (
             <EmptyRow>No warnings today.</EmptyRow>
           ) : (
@@ -339,9 +346,9 @@ function GovernanceDetail({ governance }: { governance: ReturnType<typeof useGov
       {learning && (
         <div className="card-detail-overlay__row card-detail-overlay__row--highlight">
           <span className="card-detail-overlay__row-primary">Learning</span>
-          <span className="card-detail-overlay__row-meta">{learning.total_approved ?? 0} approved</span>
-          <span className="card-detail-overlay__row-meta">{learning.total_rejected ?? 0} rejected</span>
-          <span className="card-detail-overlay__row-meta">{learning.total_skills_learned ?? 0} learned</span>
+          <span className="card-detail-overlay__row-meta">{learning.total_reviewed ?? 0} reviewed</span>
+          <span className="card-detail-overlay__row-meta">· {learning.total_rejected ?? 0} rejected</span>
+          <span className="card-detail-overlay__row-meta">· {learning.total_discarded ?? 0} discarded</span>
         </div>
       )}
       <h3 className="card-detail-overlay__section-title">Read Laws</h3>
