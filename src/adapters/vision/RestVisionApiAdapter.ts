@@ -9,6 +9,7 @@ import type {
   Health,
   IdentityResult,
   KillResult,
+  KnowledgeItemResult,
   KnowledgeResult,
   LearnRequest,
   LearnResult,
@@ -21,6 +22,7 @@ import type {
   ModelSelectRequest,
   ModelsResult,
   PendingLearnSuggestionsResult,
+  PromoteKnowledgeResult,
   RestartResult,
   SeeRequest,
   SeeResult,
@@ -268,6 +270,14 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
   getKnowledge(domain?: string, signal?: AbortSignal): Promise<KnowledgeResult> {
     const query = domain ? `?domain=${encodeURIComponent(domain)}` : ''
     return this.requestJson<KnowledgeResult>(`/knowledge${query}`, { signal })
+  }
+
+  getKnowledgeItem(knowledgeId: string, signal?: AbortSignal): Promise<KnowledgeItemResult> {
+    return this.requestJson<KnowledgeItemResult>(`/knowledge/${encodeURIComponent(knowledgeId)}`, { signal })
+  }
+
+  promoteKnowledge(knowledgeId: string, signal?: AbortSignal): Promise<PromoteKnowledgeResult> {
+    return this.requestJson<PromoteKnowledgeResult>(`/knowledge/${encodeURIComponent(knowledgeId)}/promote`, { method: 'POST', signal })
   }
 
   // ------------------------------------------------------------------

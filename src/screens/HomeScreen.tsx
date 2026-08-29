@@ -19,6 +19,7 @@ import { useModels } from '../hooks/useModels'
 import { useGovernance } from '../hooks/useGovernance'
 import { useMcp } from '../hooks/useMcp'
 import { useSkills } from '../hooks/useSkills'
+import { useKnowledgeNotes } from '../hooks/useKnowledgeNotes'
 import { useBudget } from '../hooks/useBudget'
 import type { HudEvent, HudEventTone } from '../components/hudEvents'
 
@@ -55,6 +56,7 @@ export function HomeScreen() {
   const governance = useGovernance()
   const mcp = useMcp()
   const skills = useSkills()
+  const knowledgeNotes = useKnowledgeNotes()
   const budget = useBudget()
   const [activeDetail, setActiveDetail] = useState<DetailCardId | null>(null)
   const {
@@ -104,6 +106,7 @@ export function HomeScreen() {
             governance={governance}
             mcp={mcp}
             skills={skills}
+            knowledgeNotes={knowledgeNotes}
             budget={budget}
             health={health}
             onSelect={setActiveDetail}
@@ -122,6 +125,7 @@ export function HomeScreen() {
             governance={governance}
             mcp={mcp}
             skills={skills}
+            knowledgeNotes={knowledgeNotes}
             budget={budget}
             health={health}
             onClose={() => setActiveDetail(null)}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { type Health } from '../domain/vision'
+import { type Health, type KnowledgeItem } from '../domain/vision'
 import type { useAgents } from '../hooks/useAgents'
 import type { useLoops } from '../hooks/useLoops'
 import type { useModels } from '../hooks/useModels'
@@ -7,6 +7,7 @@ import type { useGovernance } from '../hooks/useGovernance'
 import type { useMcp } from '../hooks/useMcp'
 import type { useSkills } from '../hooks/useSkills'
 import type { useBudget } from '../hooks/useBudget'
+import type { useKnowledgeNotes } from '../hooks/useKnowledgeNotes'
 import { formatResourceValue } from '../hooks/useVisionResource'
 import type { DetailCardId } from './detailCardId'
 import './HudLeftPanel.css'
@@ -63,6 +64,22 @@ const RECENT_LEARNED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 function countRecentlyLearned(skills: { learned_at?: string }[]): number {
   const cutoff = Date.now() - RECENT_LEARNED_WINDOW_MS
   return skills.filter((skill) => skill.learned_at && new Date(skill.learned_at).getTime() >= cutoff).length
+}
+
+/** Real counts by `workflow_status` — the Practice/Sparring -> Validate
+ * pipeline's own five user-facing states; "new"/"validated" (transient —
+ * see `KnowledgeWorkflowStatus`'s own doc comment)/"rejected" (not yet used
+ * by any real code path) are deliberately not tallied here or shown anywhere
+ * in this card/overlay pair, keeping the UI scoped to what's actually
+ * actionable today. */
+export function countKnowledgeByWorkflowStatus(notes: KnowledgeItem[]) {
+  return {
+    reviewed: notes.filter((note) => note.workflow_status === 'reviewed').length,
+    practicing: notes.filter((note) => note.workflow_status === 'practicing').length,
+    readyForPromotion: notes.filter((note) => note.workflow_status === 'ready_for_promotion').length,
+    needsRelearn: notes.filter((note) => note.workflow_status === 'needs_relearn').length,
+    promoted: notes.filter((note) => note.workflow_status === 'promoted').length,
+  }
 }
 
 function AgentsIcon() {
@@ -131,6 +148,21 @@ function SkillsIcon() {
   )
 }
 
+function KnowledgeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
+      <path
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 2.6h6.4L13 6.2v7.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.6a1 1 0 0 1 1-1Z"
+      />
+      <path stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" d="M4.6 8h5.2M4.6 10.4h5.2M4.6 5.6h2.4" />
+    </svg>
+  )
+}
+
 interface ResourceStateSource {
   data: unknown
   error: { unreachable: boolean } | null
@@ -191,7 +223,7 @@ function useTrend(value: number | null): 'up' | 'down' | null {
 
 interface InfoCardProps {
   id: DetailCardId
-  accent: 'cyan' | 'blue' | 'violet' | 'green' | 'amber' | 'ice'
+  accent: 'cyan' | 'blue' | 'violet' | 'green' | 'amber' | 'ice' | 'rose'
   icon: ReactNode
   title: string
   mainLabel: string
@@ -273,6 +305,7 @@ interface HudLeftPanelProps {
   governance: ReturnType<typeof useGovernance>
   mcp: ReturnType<typeof useMcp>
   skills: ReturnType<typeof useSkills>
+  knowledgeNotes: ReturnType<typeof useKnowledgeNotes>
   budget: ReturnType<typeof useBudget>
   health: Health | null
   onSelect: (id: DetailCardId) => void
@@ -289,19 +322,21 @@ interface HudLeftPanelProps {
  * calling each hook a second time here would double the request rate for
  * no reason.
  */
-export function HudLeftPanel({ agents, loops, models, governance, mcp, skills, budget, health, onSelect }: HudLeftPanelProps) {
+export function HudLeftPanel({ agents, loops, models, governance, mcp, skills, knowledgeNotes, budget, health, onSelect }: HudLeftPanelProps) {
   const agentsState = getResourceState(agents)
   const loopsState = getResourceState(loops)
   const modelsState = getResourceState(models)
   const governanceState = getResourceState(governance)
   const mcpState = getResourceState(mcp)
   const skillsState = getResourceState(skills)
+  const knowledgeState = getResourceState(knowledgeNotes)
 
   const unresolvedAgentCases = agents.data ? agents.data.unresolved_cases.length : 0
   const failedLoopsToday = loops.data ? loops.data.today.failed : 0
   const blockedToday = governance.data ? governance.data.blocked_today.length : 0
   const mcpFailingCount = mcp.data ? Object.values(mcp.data.activity).filter((entry) => entry.failure_count > 0).length : 0
   const budgetEmergency = budget.data ? Boolean((budget.data.status as { emergency?: unknown }).emergency) : false
+  const knowledgeCounts = countKnowledgeByWorkflowStatus(knowledgeNotes.data?.knowledge ?? [])
 
   return (
     <div className="hud-left-panel">
@@ -411,6 +446,24 @@ export function HudLeftPanel({ agents, loops, models, governance, mcp, skills, b
         state={skillsState}
         lastUpdated={skills.lastUpdated}
         onSelect={onSelect}
+      />
+      <InfoCard
+        id="knowledge"
+        accent="rose"
+        icon={<KnowledgeIcon />}
+        title="Knowledge Notes"
+        mainLabel="ready for promo"
+        mainValue={formatResourceValue(knowledgeNotes, () => String(knowledgeCounts.readyForPromotion))}
+        trendValue={knowledgeNotes.data ? knowledgeCounts.readyForPromotion : null}
+        metrics={[
+          { label: 'Reviewed', value: formatResourceValue(knowledgeNotes, () => String(knowledgeCounts.reviewed)) },
+          { label: 'Practicing', value: formatResourceValue(knowledgeNotes, () => String(knowledgeCounts.practicing)) },
+          { label: 'Needs relearn', value: formatResourceValue(knowledgeNotes, () => String(knowledgeCounts.needsRelearn)) },
+        ]}
+        state={knowledgeState}
+        lastUpdated={knowledgeNotes.lastUpdated}
+        onSelect={onSelect}
+        attention={knowledgeState.tone === 'ready' && (knowledgeCounts.readyForPromotion > 0 || knowledgeCounts.needsRelearn > 0)}
       />
     </div>
   )

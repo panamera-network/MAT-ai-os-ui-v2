@@ -9,6 +9,7 @@ import type {
   Health,
   IdentityResult,
   KillResult,
+  KnowledgeItemResult,
   KnowledgeResult,
   LearnRequest,
   LearnResult,
@@ -21,6 +22,7 @@ import type {
   ModelSelectRequest,
   ModelsResult,
   PendingLearnSuggestionsResult,
+  PromoteKnowledgeResult,
   RestartResult,
   SeeRequest,
   SeeResult,
@@ -85,6 +87,8 @@ export interface VisionApiAdapter {
   getSkills(signal?: AbortSignal): Promise<SkillsResult>
   getSkillVersions(skillId: string, signal?: AbortSignal): Promise<SkillVersionsResult>
   getKnowledge(domain?: string, signal?: AbortSignal): Promise<KnowledgeResult>
+  getKnowledgeItem(knowledgeId: string, signal?: AbortSignal): Promise<KnowledgeItemResult>
+  promoteKnowledge(knowledgeId: string, signal?: AbortSignal): Promise<PromoteKnowledgeResult>
 
   getModels(signal?: AbortSignal): Promise<ModelsResult>
   selectModel(request: ModelSelectRequest, signal?: AbortSignal): Promise<ModelsResult>

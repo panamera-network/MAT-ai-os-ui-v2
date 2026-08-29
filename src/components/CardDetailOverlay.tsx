@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { CAPABILITIES, TIERS, type Health, type SkillVersion } from '../domain/vision'
+import { CAPABILITIES, TIERS, type Health, type KnowledgeItem, type KnowledgeWorkflowStatus, type SkillVersion } from '../domain/vision'
 import type { useAgents } from '../hooks/useAgents'
 import type { useLoops } from '../hooks/useLoops'
 import type { useModels } from '../hooks/useModels'
 import type { useGovernance } from '../hooks/useGovernance'
 import type { useMcp } from '../hooks/useMcp'
 import type { useSkills } from '../hooks/useSkills'
+import type { useKnowledgeNotes } from '../hooks/useKnowledgeNotes'
 import type { useBudget } from '../hooks/useBudget'
+import { countKnowledgeByWorkflowStatus } from './HudLeftPanel'
 import { useVisionApi } from '../app/VisionApiProvider'
 import { VisionApiError } from '../adapters/vision'
 import type { DetailCardId } from './detailCardId'
@@ -20,6 +22,7 @@ interface CardDetailOverlayProps {
   governance: ReturnType<typeof useGovernance>
   mcp: ReturnType<typeof useMcp>
   skills: ReturnType<typeof useSkills>
+  knowledgeNotes: ReturnType<typeof useKnowledgeNotes>
   budget: ReturnType<typeof useBudget>
   health: Health | null
   onClose: () => void
@@ -32,6 +35,7 @@ const TITLES: Record<DetailCardId, string> = {
   governance: 'Read Laws',
   mcp: 'MCP',
   skills: 'Skill Library',
+  knowledge: 'Knowledge Notes',
 }
 
 function CloseIcon() {
@@ -422,6 +426,282 @@ function SkillsDetail({ skills }: { skills: ReturnType<typeof useSkills> }) {
   )
 }
 
+const WORKFLOW_STATUS_LABEL: Record<KnowledgeWorkflowStatus, string> = {
+  new: 'New',
+  reviewed: 'Reviewed',
+  practicing: 'Practicing',
+  validated: 'Validated',
+  ready_for_promotion: 'Ready for Promotion',
+  promoted: 'Promoted',
+  rejected: 'Rejected',
+  needs_relearn: 'Needs Relearn',
+}
+
+function workflowBadgeTone(status: KnowledgeWorkflowStatus): 'ok' | 'warning' | 'danger' | 'muted' {
+  if (status === 'ready_for_promotion' || status === 'promoted') return 'ok'
+  if (status === 'needs_relearn') return 'danger'
+  if (status === 'practicing') return 'warning'
+  return 'muted'
+}
+
+/** Priority order for the Practice/Sparring -> Validate phase's five
+ * user-facing states — most-actionable first (something needing a human
+ * decision), so a long list doesn't bury a `ready_for_promotion`/
+ * `needs_relearn` note under a page of already-`promoted` ones. `new`/
+ * `validated`/`rejected` are filtered out entirely — see
+ * `countKnowledgeByWorkflowStatus`'s own doc comment for why. */
+const KNOWLEDGE_STATUS_PRIORITY: Partial<Record<KnowledgeWorkflowStatus, number>> = {
+  ready_for_promotion: 0,
+  needs_relearn: 1,
+  practicing: 2,
+  reviewed: 3,
+  promoted: 4,
+}
+
+/** A note's `source` field is genuinely one of two different things
+ * depending on what `/learn` was given — a real URL/repo link that was
+ * fetched, or the raw pasted text itself (already fully shown as this
+ * note's own `statement`/"Extracted knowledge" a row above) — see
+ * `V2Body.propose_learning`'s own `extract_source_and_instruction`/
+ * `fetch_content`. Labeling both cases "Source" reads as if they're the
+ * same kind of thing; they aren't, and must never be presented as one
+ * merged field with "Extracted knowledge" either — this only ever decides
+ * the LABEL and a concise DISPLAY string for the source row, never touches
+ * the statement row next to it. */
+function classifySource(source: string): { label: string; display: string } {
+  const trimmed = source.trim()
+  if (/^https?:\/\//i.test(trimmed)) {
+    // "Ringkas": the scheme adds nothing a reader needs — domain + path is
+    // the concise, recognizable form (e.g. "github.com/OpenHands/sdk").
+    return { label: 'Origin', display: trimmed.replace(/^https?:\/\//i, '').replace(/\/$/, '') }
+  }
+  return { label: 'Source Context', display: source }
+}
+
+/** Long enough that a real Verifier/Sparring failure reason (these run to a
+ * full sentence or more, e.g. a dispatch error) reads as a wall of text
+ * inside a single row — collapsed to this many characters by default, with
+ * a click to reveal the rest. Short reasons never show a toggle at all. */
+const WHY_TRUNCATE_LENGTH = 120
+
+function sortKnowledgeNotes(notes: KnowledgeItem[]): KnowledgeItem[] {
+  return notes
+    .filter((note) => note.workflow_status in KNOWLEDGE_STATUS_PRIORITY)
+    .sort((a, b) => {
+      const byPriority = (KNOWLEDGE_STATUS_PRIORITY[a.workflow_status] ?? 99) - (KNOWLEDGE_STATUS_PRIORITY[b.workflow_status] ?? 99)
+      return byPriority !== 0 ? byPriority : b.updated_at.localeCompare(a.updated_at)
+    })
+}
+
+/** One Knowledge Note — collapsed shows just enough to recognize/triage it
+ * (topic, workflow_status badge, domain), matching `SkillRow`'s own
+ * collapsed shape. Expanding fetches a FRESH `GET /knowledge/{id}` (rather
+ * than trusting the list snapshot's own poll cadence — important right
+ * after a promote action, or if an overnight practice sweep touched it) and
+ * reveals source/statement/practice history/validation/promoted skill. A
+ * `ready_for_promotion` note additionally shows the one write action this
+ * whole gate has: `POST /knowledge/{id}/promote`, human-triggered, exactly
+ * like `PendingLearnRow`'s own Approve/Reject buttons elsewhere in this HUD. */
+function KnowledgeNoteRow({ note, onChanged }: { note: KnowledgeItem; onChanged: () => void }) {
+  const api = useVisionApi()
+  const [expanded, setExpanded] = useState(false)
+  const [detail, setDetail] = useState<KnowledgeItem>(note)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [promoteBusy, setPromoteBusy] = useState(false)
+  const [promoteResult, setPromoteResult] = useState<{ status: string; reason: string } | null>(null)
+  const [whyExpanded, setWhyExpanded] = useState(false)
+
+  const toggle = () => {
+    const next = !expanded
+    setExpanded(next)
+    if (next) {
+      setDetailLoading(true)
+      api
+        .getKnowledgeItem(note.id)
+        .then((result) => {
+          if (result.knowledge) setDetail(result.knowledge)
+        })
+        .catch((err: unknown) => {
+          // A failed detail fetch just means the row keeps showing whatever
+          // it already had (the list snapshot, or a prior successful fetch)
+          // — the collapsed summary is still real either way.
+          if (!(err instanceof VisionApiError)) throw err
+        })
+        .finally(() => setDetailLoading(false))
+    }
+  }
+
+  const handlePromote = () => {
+    setPromoteBusy(true)
+    setPromoteResult(null)
+    api
+      .promoteKnowledge(detail.id)
+      .then((result) => {
+        setPromoteResult({ status: result.status, reason: result.reason })
+        return api.getKnowledgeItem(detail.id)
+      })
+      .then((result) => {
+        if (result.knowledge) setDetail(result.knowledge)
+      })
+      .catch((err: unknown) => {
+        setPromoteResult({ status: 'failed', reason: err instanceof VisionApiError ? err.detail : 'Something went wrong.' })
+      })
+      .finally(() => {
+        setPromoteBusy(false)
+        onChanged()
+      })
+  }
+
+  const latestVersion = detail.versions.length > 0 ? detail.versions[detail.versions.length - 1] : null
+  const sourceInfo = latestVersion ? classifySource(latestVersion.source) : null
+  const passCount = detail.practice_history.filter((attempt) => attempt.result === 'pass').length
+  const whyReason = detail.workflow_status === 'needs_relearn' ? detail.workflow_reason : null
+  const whyIsLong = Boolean(whyReason && whyReason.length > WHY_TRUNCATE_LENGTH)
+
+  return (
+    <div className="card-detail-overlay__group">
+      <div
+        className="card-detail-overlay__row card-detail-overlay__row--clickable"
+        role="button"
+        tabIndex={0}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            toggle()
+          }
+        }}
+      >
+        <span className="card-detail-overlay__row-primary">{note.topic}</span>
+        <span className={`card-detail-overlay__badge card-detail-overlay__badge--${workflowBadgeTone(note.workflow_status)}`}>
+          {WORKFLOW_STATUS_LABEL[note.workflow_status]}
+        </span>
+        {note.domain && <span className="card-detail-overlay__row-tag">{note.domain}</span>}
+        <span className="card-detail-overlay__row-meta">{expanded ? 'hide detail ▲' : 'detail ▼'}</span>
+      </div>
+      {expanded && (
+        <div className="card-detail-overlay__list">
+          {detailLoading && detail === note && <EmptyRow>Loading…</EmptyRow>}
+          {latestVersion && (
+            <div className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-primary">Extracted knowledge</span>
+              <span className="card-detail-overlay__row-meta">{latestVersion.statement}</span>
+            </div>
+          )}
+          {sourceInfo && (
+            <div className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-primary">{sourceInfo.label}</span>
+              <span className="card-detail-overlay__row-meta">{sourceInfo.display}</span>
+            </div>
+          )}
+          {whyReason && whyIsLong && (
+            <div
+              className="card-detail-overlay__row card-detail-overlay__row--clickable"
+              role="button"
+              tabIndex={0}
+              onClick={() => setWhyExpanded((prev) => !prev)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setWhyExpanded((prev) => !prev)
+                }
+              }}
+            >
+              <span className="card-detail-overlay__row-primary">Why</span>
+              <span className="card-detail-overlay__badge card-detail-overlay__badge--danger">Failed</span>
+              <span className="card-detail-overlay__row-meta">
+                {whyExpanded ? whyReason : `${whyReason.slice(0, WHY_TRUNCATE_LENGTH)}…`}
+              </span>
+              <span className="card-detail-overlay__row-meta">{whyExpanded ? 'less ▲' : 'more ▼'}</span>
+            </div>
+          )}
+          {whyReason && !whyIsLong && (
+            <div className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-primary">Why</span>
+              <span className="card-detail-overlay__badge card-detail-overlay__badge--danger">Failed</span>
+              <span className="card-detail-overlay__row-meta">{whyReason}</span>
+            </div>
+          )}
+          {(detail.workflow_status === 'practicing' || detail.practice_history.length > 0) && (
+            <div className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-primary">Practice</span>
+              <span className="card-detail-overlay__row-meta">
+                {detail.practice_history.length} attempt{detail.practice_history.length === 1 ? '' : 's'}
+              </span>
+              <span className="card-detail-overlay__row-meta">{passCount} passed</span>
+            </div>
+          )}
+          {detail.practice_history.map((attempt) => (
+            <div key={attempt.attempt_id} className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-tag">{attempt.engine}</span>
+              <span
+                className={`card-detail-overlay__badge card-detail-overlay__badge--${
+                  attempt.result === 'pass' ? 'ok' : attempt.result === 'disputed' ? 'warning' : 'danger'
+                }`}
+              >
+                {attempt.result}
+              </span>
+              <span className="card-detail-overlay__row-meta">{attempt.use_case_or_domain}</span>
+              <span className="card-detail-overlay__row-meta">{formatWhen(attempt.timestamp)}</span>
+            </div>
+          ))}
+          {detail.validation_result && (
+            <div className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-primary">Validation</span>
+              <span className="card-detail-overlay__row-meta">{JSON.stringify(detail.validation_result)}</span>
+            </div>
+          )}
+          {detail.promoted_skill_id && (
+            <div className="card-detail-overlay__row card-detail-overlay__row--highlight">
+              <span className="card-detail-overlay__row-primary">Promoted skill</span>
+              <span className="card-detail-overlay__row-meta">{detail.promoted_skill_id}</span>
+            </div>
+          )}
+          {detail.workflow_status === 'ready_for_promotion' &&
+            (promoteResult ? (
+              <span className={`card-detail-overlay__badge card-detail-overlay__badge--${promoteResult.status === 'promoted' ? 'ok' : 'danger'}`}>
+                {promoteResult.status === 'promoted' ? 'Promoted.' : `${promoteResult.status} — ${promoteResult.reason}`}
+              </span>
+            ) : (
+              <button type="button" className="card-detail-overlay__promote-button" disabled={promoteBusy} onClick={handlePromote}>
+                {promoteBusy ? 'Promoting…' : 'Approve / Promote'}
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KnowledgeNotesDetail({ knowledgeNotes }: { knowledgeNotes: ReturnType<typeof useKnowledgeNotes> }) {
+  const list = knowledgeNotes.data?.knowledge ?? []
+  const counts = countKnowledgeByWorkflowStatus(list)
+  const sorted = sortKnowledgeNotes(list)
+
+  return (
+    <>
+      <div className="card-detail-overlay__row card-detail-overlay__row--highlight">
+        <span className="card-detail-overlay__row-primary">By status</span>
+        <span className="card-detail-overlay__row-meta">{counts.reviewed} reviewed</span>
+        <span className="card-detail-overlay__row-meta">{counts.practicing} practicing</span>
+        <span className="card-detail-overlay__row-meta">{counts.readyForPromotion} ready for promotion</span>
+        <span className="card-detail-overlay__row-meta">{counts.needsRelearn} needs relearn</span>
+        <span className="card-detail-overlay__row-meta">{counts.promoted} promoted</span>
+      </div>
+      <h3 className="card-detail-overlay__section-title">Knowledge Notes</h3>
+      {sorted.length === 0 ? (
+        <EmptyRow>No knowledge notes yet.</EmptyRow>
+      ) : (
+        <div className="card-detail-overlay__list">
+          {sorted.map((note) => (
+            <KnowledgeNoteRow key={note.id} note={note} onChanged={knowledgeNotes.refetch} />
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 /**
  * Batch A: lightweight frosted detail overlay for the left panel's cards —
  * rendered in `GlassHud`'s already-empty center cell (never a new page/
@@ -432,7 +712,7 @@ function SkillsDetail({ skills }: { skills: ReturnType<typeof useSkills> }) {
  * elsewhere (MCP's pending approvals are read-only here: there is no
  * approve/deny route for them today, unlike Learn suggestions).
  */
-export function CardDetailOverlay({ cardId, agents, loops, models, governance, mcp, skills, budget, health, onClose }: CardDetailOverlayProps) {
+export function CardDetailOverlay({ cardId, agents, loops, models, governance, mcp, skills, knowledgeNotes, budget, health, onClose }: CardDetailOverlayProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -442,20 +722,33 @@ export function CardDetailOverlay({ cardId, agents, loops, models, governance, m
   }, [onClose])
 
   return (
-    <div className="card-detail-overlay" role="dialog" aria-label={`${TITLES[cardId]} details`}>
-      <header className="card-detail-overlay__header">
-        <span>{TITLES[cardId]}</span>
-        <button type="button" className="card-detail-overlay__close" onClick={onClose} aria-label="Close">
-          <CloseIcon />
-        </button>
-      </header>
-      <div className="card-detail-overlay__body">
-        {cardId === 'agents' && <AgentsDetail agents={agents} />}
-        {cardId === 'loops' && <LoopsDetail loops={loops} />}
-        {cardId === 'models' && <ModelsDetail models={models} budget={budget} health={health} />}
-        {cardId === 'governance' && <GovernanceDetail governance={governance} />}
-        {cardId === 'mcp' && <McpDetail mcp={mcp} />}
-        {cardId === 'skills' && <SkillsDetail skills={skills} />}
+    // Click-outside-to-close: this backdrop fills the whole detail zone
+    // (transparent — the orb stays visible behind it, matching this HUD's
+    // own "deliberately empty center" design, this is a click target only,
+    // never a dimming layer). `onClick` fires for a click that lands here
+    // directly; the panel below stops it from ever bubbling up from inside.
+    <div className="card-detail-overlay-backdrop" onClick={onClose}>
+      <div
+        className="card-detail-overlay"
+        role="dialog"
+        aria-label={`${TITLES[cardId]} details`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="card-detail-overlay__header">
+          <span>{TITLES[cardId]}</span>
+          <button type="button" className="card-detail-overlay__close" onClick={onClose} aria-label="Close">
+            <CloseIcon />
+          </button>
+        </header>
+        <div className="card-detail-overlay__body">
+          {cardId === 'agents' && <AgentsDetail agents={agents} />}
+          {cardId === 'loops' && <LoopsDetail loops={loops} />}
+          {cardId === 'models' && <ModelsDetail models={models} budget={budget} health={health} />}
+          {cardId === 'governance' && <GovernanceDetail governance={governance} />}
+          {cardId === 'mcp' && <McpDetail mcp={mcp} />}
+          {cardId === 'skills' && <SkillsDetail skills={skills} />}
+          {cardId === 'knowledge' && <KnowledgeNotesDetail knowledgeNotes={knowledgeNotes} />}
+        </div>
       </div>
     </div>
   )
