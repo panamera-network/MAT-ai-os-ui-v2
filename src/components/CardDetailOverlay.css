@@ -1,4 +1,14 @@
 .card-detail-overlay {
+  /* Modal-scoped readability bump: +1px on top of the shared secondary
+     boost (2px), for this component's own body/row text ONLY — re-declaring
+     the variable here means every descendant reading
+     var(--hud-font-boost-secondary) (rows, row-meta, row-tag, empty state,
+     model slots, and SkillSnapshotPanel's own fields/diff, all nested
+     inside this modal) picks up 3px, while chat/left-panel/right-panel
+     (outside this DOM subtree) stay at the shared 2px, untouched. Headings/
+     badges/the promote button still read the UNCHANGED --hud-font-boost
+     (1px) and are deliberately not affected by this override either. */
+  --hud-font-boost-secondary: 3px;
   display: flex;
   flex-direction: column;
   width: min(560px, 88%);
