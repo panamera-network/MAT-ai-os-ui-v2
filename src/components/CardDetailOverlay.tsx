@@ -50,10 +50,56 @@ function EmptyRow({ children }: { children: string }) {
   return <p className="card-detail-overlay__empty">{children}</p>
 }
 
-function AgentsDetail({ agents }: { agents: ReturnType<typeof useAgents> }) {
+/** Most-recently-updated/created match only — a compact row shows one
+ * current situation per agent, never a sub-list. `GovernanceCase.updated_at`
+ * / `McpApproval.created_at` are both ISO strings, so string comparison
+ * sorts correctly the same way `sortKnowledgeNotes` already relies on. */
+function mostRecent<T>(items: T[], at: (item: T) => string): T | null {
+  if (items.length === 0) return null
+  return items.reduce((a, b) => (at(a) > at(b) ? a : b))
+}
+
+/** Surfacing priority: an agent with a real unresolved/failed governance
+ * case first, then a currently-active one, then everything else — real
+ * telemetry (`active_agent_ids` membership, `unresolved_cases`), never a
+ * guessed health signal. */
+function agentPriority(hasUnresolvedCase: boolean, isActive: boolean): number {
+  if (hasUnresolvedCase) return 0
+  if (isActive) return 1
+  return 2
+}
+
+function AgentsDetail({ agents, mcp }: { agents: ReturnType<typeof useAgents>; mcp: ReturnType<typeof useMcp> }) {
   const list = agents.data?.agents ?? []
   const activeIds = new Set(agents.data?.active_agent_ids ?? [])
   const unresolved = agents.data?.unresolved_cases ?? []
+  // `Agent` itself carries no status/task/activity field at all (confirmed
+  // against `base_agent.py::to_dict()` — the real API never returns one) —
+  // these are the only two OTHER already-fetched, real per-agent signals
+  // that exist anywhere: a still-open governance case, and an in-flight MCP
+  // tool-access request. Neither is fabricated; both are simply cross-
+  // referenced by `agent_id`/`entity_id` here rather than re-fetched.
+  const pendingApprovals = (mcp.data?.pending_approvals ?? []).filter((approval) => approval.status === 'pending')
+
+  const rows = list
+    .map((agent) => {
+      const latestCase = mostRecent(
+        unresolved.filter((c) => c.entity_id === agent.agent_id),
+        (c) => c.updated_at,
+      )
+      const latestApproval = mostRecent(
+        pendingApprovals.filter((approval) => approval.agent_id === agent.agent_id),
+        (approval) => approval.created_at,
+      )
+      const isActive = activeIds.has(agent.agent_id)
+      const lastActivity = mostRecent(
+        [latestCase?.updated_at, latestApproval?.created_at].filter((value): value is string => Boolean(value)),
+        (value) => value,
+      )
+      return { agent, latestCase, latestApproval, isActive, lastActivity, priority: agentPriority(Boolean(latestCase), isActive) }
+    })
+    .sort((a, b) => a.priority - b.priority)
+
   return (
     <>
       {unresolved.length > 0 && (
@@ -72,17 +118,23 @@ function AgentsDetail({ agents }: { agents: ReturnType<typeof useAgents> }) {
         </>
       )}
       <h3 className="card-detail-overlay__section-title">Agents</h3>
-      {list.length === 0 ? (
-        <EmptyRow>No agents yet.</EmptyRow>
+      {rows.length === 0 ? (
+        <EmptyRow>No active agents. MAT will spawn agents when a task requires delegation.</EmptyRow>
       ) : (
         <div className="card-detail-overlay__list">
-          {list.map((agent) => (
+          {rows.map(({ agent, latestCase, latestApproval, isActive, lastActivity }) => (
             <div key={agent.agent_id} className="card-detail-overlay__row">
               <span className="card-detail-overlay__row-primary">{agent.name}</span>
-              {activeIds.has(agent.agent_id) && <span className="card-detail-overlay__badge card-detail-overlay__badge--ok">active</span>}
+              <span className={`card-detail-overlay__badge card-detail-overlay__badge--${latestCase ? 'warning' : isActive ? 'ok' : 'muted'}`}>
+                {latestCase ? latestCase.state : isActive ? 'active' : 'idle'}
+              </span>
               <span className="card-detail-overlay__row-tag">{agent.domain}</span>
               <span className="card-detail-overlay__row-meta">{agent.is_global ? 'Global' : 'Personal'}</span>
               <span className="card-detail-overlay__row-meta">{agent.skill_ids.length} skill{agent.skill_ids.length === 1 ? '' : 's'}</span>
+              {latestApproval && (
+                <span className="card-detail-overlay__row-meta">{latestApproval.tool} via {latestApproval.server}</span>
+              )}
+              {lastActivity && <span className="card-detail-overlay__row-meta">{formatWhen(lastActivity)}</span>}
             </div>
           ))}
         </div>
@@ -744,7 +796,7 @@ export function CardDetailOverlay({ cardId, agents, loops, models, governance, m
           </button>
         </header>
         <div className="card-detail-overlay__body">
-          {cardId === 'agents' && <AgentsDetail agents={agents} />}
+          {cardId === 'agents' && <AgentsDetail agents={agents} mcp={mcp} />}
           {cardId === 'loops' && <LoopsDetail loops={loops} />}
           {cardId === 'models' && <ModelsDetail models={models} budget={budget} health={health} />}
           {cardId === 'governance' && <GovernanceDetail governance={governance} />}
