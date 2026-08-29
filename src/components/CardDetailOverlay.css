@@ -225,10 +225,25 @@
   display: flex;
   align-items: center;
   gap: 5px;
+  max-width: 100%;
   padding: 2px 6px;
   border: 1px solid rgba(184, 163, 255, 0.14);
-  color: var(--hud-text-muted);
+  color: var(--hud-text);
   font-size: calc(8px + var(--hud-font-boost-secondary));
+}
+
+/* Only the model name itself wraps on a long value -- the short, fixed-
+   text tier label (PRIMARY/FB LOCAL/...) next to it never should. */
+.card-detail-overlay__slot-model {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* FB LOCAL/FB CLOUD/FB API stay visually secondary to PRIMARY (above),
+   which keeps the stronger `--hud-text` weight it already had. */
+.card-detail-overlay__slot--fallback {
+  border-color: rgba(184, 163, 255, 0.08);
+  color: var(--hud-text-faint);
 }
 
 .card-detail-overlay__slot.is-active {

@@ -227,16 +227,17 @@ function ModelsDetail({ models, budget, health }: { models: ReturnType<typeof us
     <div className="card-detail-overlay__list">
       {health && (
         <div className="card-detail-overlay__row card-detail-overlay__row--highlight">
-          <span className="card-detail-overlay__row-primary">Active now</span>
-          <span className="card-detail-overlay__row-meta">{health.active_model.provider}/{health.active_model.model}</span>
+          <span className="card-detail-overlay__row-primary">{health.active_model.model}</span>
+          <span className="card-detail-overlay__row-tag">{health.active_model.provider}</span>
+          <span className="card-detail-overlay__row-meta">Active now</span>
         </div>
       )}
       {budget.data && (
         <div className="card-detail-overlay__row">
           <span className="card-detail-overlay__row-primary">Budget</span>
-          <span className="card-detail-overlay__row-meta">${budget.data.used_usd.toFixed(4)} used</span>
-          <span className="card-detail-overlay__row-meta">${budget.data.available_usd.toFixed(4)} available</span>
-          <span className="card-detail-overlay__row-meta">${budget.data.limit_usd.toFixed(4)} limit</span>
+          <span className="card-detail-overlay__row-meta">Used ${budget.data.used_usd.toFixed(4)}</span>
+          <span className="card-detail-overlay__row-meta">· Available ${budget.data.available_usd.toFixed(4)}</span>
+          <span className="card-detail-overlay__row-meta">· Limit ${budget.data.limit_usd.toFixed(4)}</span>
         </div>
       )}
       {usage.length > 0 && (
@@ -271,10 +272,18 @@ function ModelsDetail({ models, budget, health }: { models: ReturnType<typeof us
                 {TIERS.filter((tier) => Boolean(profiles?.[capability]?.[tier])).map((tier) => {
                   const slot = profiles?.[capability]?.[tier]
                   const isActive = health && slot && slot.provider === health.active_model.provider && slot.model === health.active_model.model
+                  // PRIMARY stays the strongest-weight entry; every FB
+                  // tier (local/cloud/api) is visually secondary/muted —
+                  // the currently active model still gets `.is-active`
+                  // regardless of which tier it's sitting in.
+                  const isFallback = tier !== 'primary'
                   return (
-                    <span key={tier} className={`card-detail-overlay__slot${isActive ? ' is-active' : ''}`}>
+                    <span
+                      key={tier}
+                      className={`card-detail-overlay__slot${isFallback ? ' card-detail-overlay__slot--fallback' : ''}${isActive ? ' is-active' : ''}`}
+                    >
                       <span className="card-detail-overlay__slot-tier">{tier.replace('fallback_', 'fb ')}</span>
-                      <span>{slot?.provider}/{slot?.model}</span>
+                      <span className="card-detail-overlay__slot-model">{slot?.provider}/{slot?.model}</span>
                     </span>
                   )
                 })}
