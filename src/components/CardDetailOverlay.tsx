@@ -371,40 +371,66 @@ function GovernanceDetail({ governance }: { governance: ReturnType<typeof useGov
   )
 }
 
+/** "Attention first" using only what's real: `MCPManager.get_activity()` is
+ * "real per-server call outcomes only, never a push-based health check
+ * (this backend has none)" (see `McpActivity`'s own doc comment) — there is
+ * no real connected/offline flag to sort on. A server that has actually
+ * failed a real call, or has a real pending approval waiting on it, is the
+ * genuine "needs a human" signal this data carries; a server with zero
+ * calls yet is neither healthy nor unhealthy, just unproven, so it sorts
+ * with the healthy group rather than the attention one. */
+function mcpServerPriority(hasFailure: boolean, hasPending: boolean): number {
+  return hasFailure || hasPending ? 0 : 1
+}
+
 function McpDetail({ mcp }: { mcp: ReturnType<typeof useMcp> }) {
   const servers = mcp.data?.servers ?? []
   const pending = mcp.data?.pending_approvals ?? []
   const activity = mcp.data?.activity ?? {}
+
+  const serverRows = servers
+    .map((server) => {
+      const stats = activity[server.name]
+      const pendingForServer = pending.filter((approval) => approval.server === server.name).length
+      const lastActivity = stats
+        ? mostRecent([stats.last_success_at, stats.last_failure_at].filter((v): v is string => Boolean(v)), (v) => v)
+        : null
+      const hasFailure = Boolean(stats && stats.failure_count > 0)
+      return { server, stats, pendingForServer, lastActivity, priority: mcpServerPriority(hasFailure, pendingForServer > 0) }
+    })
+    .sort((a, b) => a.priority - b.priority)
+
   return (
     <>
       <h3 className="card-detail-overlay__section-title">Servers</h3>
-      {servers.length === 0 ? (
-        <EmptyRow>No MCP servers registered.</EmptyRow>
+      {serverRows.length === 0 ? (
+        <EmptyRow>No MCP servers registered. Connect an MCP server to give MAT access to external tools and services.</EmptyRow>
       ) : (
         <div className="card-detail-overlay__list">
-          {servers.map((server) => {
-            const stats = activity[server.name]
-            return (
-              <div key={server.name} className="card-detail-overlay__row">
-                <span className="card-detail-overlay__row-primary">{server.name}</span>
-                {stats ? (
-                  <>
-                    {stats.success_count > 0 && <span className="card-detail-overlay__badge card-detail-overlay__badge--ok">{stats.success_count} ok</span>}
-                    {stats.failure_count > 0 && <span className="card-detail-overlay__badge card-detail-overlay__badge--danger">{stats.failure_count} failed</span>}
-                  </>
-                ) : (
-                  <span className="card-detail-overlay__badge card-detail-overlay__badge--muted">no activity yet</span>
-                )}
-                <span className="card-detail-overlay__row-meta">{server.url}</span>
-                {server.description && <span className="card-detail-overlay__row-meta">{server.description}</span>}
-              </div>
-            )
-          })}
+          {serverRows.map(({ server, stats, pendingForServer, lastActivity }) => (
+            <div key={server.name} className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-primary">{server.name}</span>
+              {stats ? (
+                <>
+                  {stats.success_count > 0 && <span className="card-detail-overlay__badge card-detail-overlay__badge--ok">{stats.success_count} ok</span>}
+                  {stats.failure_count > 0 && <span className="card-detail-overlay__badge card-detail-overlay__badge--danger">{stats.failure_count} failed</span>}
+                </>
+              ) : (
+                <span className="card-detail-overlay__badge card-detail-overlay__badge--muted">no activity yet</span>
+              )}
+              {pendingForServer > 0 && (
+                <span className="card-detail-overlay__badge card-detail-overlay__badge--warning">{pendingForServer} pending</span>
+              )}
+              <span className="card-detail-overlay__row-meta">{server.url}</span>
+              {server.description && <span className="card-detail-overlay__row-meta">{server.description}</span>}
+              {lastActivity && <span className="card-detail-overlay__row-meta">Last activity: {formatWhen(lastActivity)}</span>}
+            </div>
+          ))}
         </div>
       )}
       <h3 className="card-detail-overlay__section-title">Pending approvals</h3>
       {pending.length === 0 ? (
-        <EmptyRow>Nothing pending.</EmptyRow>
+        <EmptyRow>No pending approvals.</EmptyRow>
       ) : (
         <div className="card-detail-overlay__list">
           {pending.map((approval) => (
