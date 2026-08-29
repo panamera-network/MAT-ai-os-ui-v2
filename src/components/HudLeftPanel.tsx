@@ -56,7 +56,10 @@ function computeTopDomain(agents: { domain: string }[]): string {
   return topDomain
 }
 
-const RECENT_LEARNED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+/** Exported for reuse by `CardDetailOverlay`'s Skill Library "genuinely
+ * recently upgraded" badge — one shared definition of "recently" so the
+ * two surfaces can never silently disagree. */
+export const RECENT_LEARNED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Skills whose real `learned_at` falls within the last 7 days — skills with
  * no `learned_at` at all (built-in, never-learned ones) are never counted,
