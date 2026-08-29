@@ -42,7 +42,17 @@
   /* type */
   --hud-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --hud-font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  /* Reverted to its original value — app titles, card/dialog headings, primary
+     metric numbers, badges/status dots, buttons, and the top status bar all
+     still read this token and must stay at their original size. */
   --hud-font-boost: 1px;
+  /* Selective typography readability pass: +1px over --hud-font-boost, scoped
+     ONLY to secondary/readable content (left-card metric labels/values,
+     right-panel service/status/memory/event text, center overlay body text
+     and row descriptions, chat response/input/activity text) — never
+     headings, primary metrics, badges, or buttons. See each component's own
+     CSS for exactly which selectors opt in. */
+  --hud-font-boost-secondary: 2px;
 
   /* spacing scale */
   --space-1: 4px;

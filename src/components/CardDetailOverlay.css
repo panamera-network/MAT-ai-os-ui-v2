@@ -77,7 +77,7 @@
 .card-detail-overlay__empty {
   margin: 10px 0;
   color: var(--hud-text-faint);
-  font-size: calc(9px + var(--hud-font-boost));
+  font-size: calc(9px + var(--hud-font-boost-secondary));
 }
 
 .card-detail-overlay__section-title {
@@ -111,7 +111,7 @@
   padding: 6px 8px;
   border: 1px solid rgba(184, 163, 255, 0.08);
   background: rgba(255, 255, 255, 0.015);
-  font-size: calc(9px + var(--hud-font-boost));
+  font-size: calc(9px + var(--hud-font-boost-secondary));
 }
 
 .card-detail-overlay__row--highlight {
@@ -141,14 +141,14 @@
   padding: 1px 6px;
   border: 1px solid rgba(184, 163, 255, 0.24);
   color: var(--hud-text-muted);
-  font-size: calc(8px + var(--hud-font-boost));
+  font-size: calc(8px + var(--hud-font-boost-secondary));
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .card-detail-overlay__row-meta {
   color: var(--hud-text-faint);
-  font-size: calc(8px + var(--hud-font-boost));
+  font-size: calc(8px + var(--hud-font-boost-secondary));
 }
 
 .card-detail-overlay__badge {
@@ -198,7 +198,7 @@
   padding: 2px 6px;
   border: 1px solid rgba(184, 163, 255, 0.14);
   color: var(--hud-text-muted);
-  font-size: calc(8px + var(--hud-font-boost));
+  font-size: calc(8px + var(--hud-font-boost-secondary));
 }
 
 .card-detail-overlay__slot.is-active {
@@ -210,4 +210,33 @@
   color: var(--hud-text-faint);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* Mandatory Knowledge Note gate: the one write action this overlay has --
+   same visual language as HudRightPanel's own Learn Approvals
+   .hud-pending-learn-row__approve, scoped to this component's own namespace. */
+.card-detail-overlay__promote-button {
+  align-self: flex-start;
+  padding: 5px 12px;
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  border-radius: 3px;
+  background: rgba(20, 66, 40, 0.18);
+  color: var(--hud-green);
+  font-family: var(--hud-font-mono);
+  font-size: calc(7px + var(--hud-font-boost));
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.card-detail-overlay__promote-button:hover:not(:disabled) {
+  background: rgba(74, 222, 128, 0.14);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.16);
+}
+
+.card-detail-overlay__promote-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

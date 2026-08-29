@@ -82,6 +82,10 @@
   --section-accent: 103 232 249;
 }
 
+.hud-left-panel__card--rose {
+  --section-accent: 244 114 182;
+}
+
 .hud-left-panel__card::before {
   content: '';
   position: absolute;
@@ -278,7 +282,7 @@
 .hud-left-panel__metrics dt {
   overflow: hidden;
   color: var(--hud-text-faint);
-  font-size: calc(6px + var(--hud-font-boost));
+  font-size: calc(6px + var(--hud-font-boost-secondary));
   letter-spacing: 0.05em;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -289,7 +293,7 @@
   overflow: hidden;
   max-width: 72px;
   color: var(--hud-text-muted);
-  font-size: calc(6px + var(--hud-font-boost));
+  font-size: calc(6px + var(--hud-font-boost-secondary));
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;

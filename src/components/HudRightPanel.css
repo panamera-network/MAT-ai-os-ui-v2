@@ -256,11 +256,11 @@
 }
 
 .hud-service-row__name {
-  font-size: calc(9px + var(--hud-font-boost));
+  font-size: calc(9px + var(--hud-font-boost-secondary));
 }
 
 .hud-service-row__state {
-  font-size: calc(7px + var(--hud-font-boost));
+  font-size: calc(7px + var(--hud-font-boost-secondary));
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--hud-text-faint);
@@ -446,7 +446,7 @@
   justify-content: space-between;
   gap: 8px;
   color: var(--hud-text-faint);
-  font-size: calc(7px + var(--hud-font-boost));
+  font-size: calc(7px + var(--hud-font-boost-secondary));
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -470,12 +470,16 @@
   grid-template-columns: 1fr auto;
   gap: 2px 4px;
   color: var(--hud-text-faint);
-  font-size: calc(7px + var(--hud-font-boost));
+  font-size: calc(7px + var(--hud-font-boost-secondary));
   text-transform: uppercase;
 }
 
 .hud-memory__tier strong {
   color: var(--hud-text-muted);
+  /* This value readout stays at its original size even though the label
+     text around it (this rule's own parent, .hud-memory__tier) is boosted
+     — pinned back to the base token rather than inheriting the boosted one. */
+  font-size: calc(7px + var(--hud-font-boost));
   font-weight: 550;
 }
 
@@ -523,7 +527,7 @@
   flex-direction: column;
   align-items: center;
   color: var(--hud-text-faint);
-  font-size: calc(6px + var(--hud-font-boost));
+  font-size: calc(6px + var(--hud-font-boost-secondary));
   letter-spacing: 0.08em;
   line-height: 1.15;
   text-transform: uppercase;
@@ -554,7 +558,7 @@
 .hud-memory__status-grid span {
   overflow: hidden;
   color: var(--hud-text-faint);
-  font-size: calc(6px + var(--hud-font-boost));
+  font-size: calc(6px + var(--hud-font-boost-secondary));
   letter-spacing: 0.06em;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -594,7 +598,7 @@
   padding-top: 7px;
   border-top: 1px solid rgba(239, 68, 68, 0.12);
   color: var(--hud-text-faint);
-  font-size: calc(7px + var(--hud-font-boost));
+  font-size: calc(7px + var(--hud-font-boost-secondary));
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -679,7 +683,7 @@
 .hud-right-panel__events-empty {
   margin: auto 0;
   color: var(--hud-text-faint);
-  font-size: calc(10px + var(--hud-font-boost));
+  font-size: calc(10px + var(--hud-font-boost-secondary));
   line-height: 1.4;
 }
 
@@ -690,7 +694,7 @@
   gap: 8px;
   padding: 2px 0;
   color: var(--hud-text-muted);
-  font-size: calc(10px + var(--hud-font-boost));
+  font-size: calc(10px + var(--hud-font-boost-secondary));
   line-height: 1.5;
 }
 

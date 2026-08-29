@@ -10,7 +10,7 @@
 .skill-snapshot__empty {
   margin-top: 2px;
   color: var(--hud-text-faint);
-  font-size: calc(9px + var(--hud-font-boost));
+  font-size: calc(9px + var(--hud-font-boost-secondary));
 }
 
 .skill-snapshot__meta {
@@ -38,7 +38,7 @@
 
 .skill-snapshot__meta-detail {
   color: var(--hud-text-faint);
-  font-size: calc(8px + var(--hud-font-boost));
+  font-size: calc(8px + var(--hud-font-boost-secondary));
 }
 
 .skill-snapshot__field {
@@ -49,14 +49,14 @@
 
 .skill-snapshot__field-label {
   color: var(--hud-text-faint);
-  font-size: calc(8px + var(--hud-font-boost));
+  font-size: calc(8px + var(--hud-font-boost-secondary));
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .skill-snapshot__field-value {
   color: var(--hud-text-muted);
-  font-size: calc(9px + var(--hud-font-boost));
+  font-size: calc(9px + var(--hud-font-boost-secondary));
   line-height: 1.4;
   white-space: pre-wrap;
 }
@@ -95,14 +95,14 @@
 
 .skill-snapshot__diff-before {
   color: var(--hud-red);
-  font-size: calc(9px + var(--hud-font-boost));
+  font-size: calc(9px + var(--hud-font-boost-secondary));
   line-height: 1.4;
   white-space: pre-wrap;
 }
 
 .skill-snapshot__diff-after {
   color: var(--hud-green);
-  font-size: calc(9px + var(--hud-font-boost));
+  font-size: calc(9px + var(--hud-font-boost-secondary));
   line-height: 1.4;
   white-space: pre-wrap;
 }
