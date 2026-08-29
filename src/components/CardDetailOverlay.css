@@ -1,3 +1,19 @@
+.card-detail-overlay-backdrop {
+  /* Fills the same detail zone `.glass-hud__detail` (GlassHud.css) already
+     centers this whole component within — transparent on purpose (a click
+     TARGET for "click outside to close", never a dimming layer; the orb
+     stays fully visible around the panel, matching this HUD's own
+     "deliberately empty center" design). `position: fixed` takes it out of
+     `.glass-hud__detail`'s own flex layout entirely, so it isn't affected
+     by (and doesn't need to duplicate) that parent's own centering — it
+     does its own, for whatever panel it wraps. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .card-detail-overlay {
   /* Modal-scoped readability bump: +1px on top of the shared secondary
      boost (2px), for this component's own body/row text ONLY — re-declaring
@@ -11,7 +27,11 @@
   --hud-font-boost-secondary: 3px;
   display: flex;
   flex-direction: column;
-  width: min(560px, 88%);
+  /* Same width formula as GlassChatPanel's own `.glass-chat-panel` — the
+     detail overlay and the chat panel it visually replaces (see
+     `chatMinimized`) now read as the same-sized object, not two different
+     panel widths. */
+  width: min(720px, 84vw);
   max-height: min(62vh, 520px);
   border: 1px solid rgba(184, 163, 255, 0.24);
   border-top-color: rgba(208, 195, 255, 0.32);
