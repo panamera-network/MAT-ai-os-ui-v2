@@ -537,10 +537,15 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
   const memoryNote = memory.error?.detail
     ?? (memory.data?.body_attached && !memoryStats ? 'Memory backend returned no statistics.' : null)
 
-  const runControl = (label: string, tone: HudEventTone, action: () => void) => {
-    onEvent(`${label} requested`, tone)
-    action()
-  }
+  // Service Controls audit: this used to log "X requested" at CLICK time,
+  // before the result was known -- Recent Events never actually reflected
+  // what happened, success or failure. Now logs the real, already-honest
+  // `control.lastResult` once it's known, tagged by what actually happened
+  // (`lastOk`) rather than a guess made before the request even ran.
+  useEffect(() => {
+    if (control.lastResult === null) return
+    onEvent(control.lastResult, control.lastOk ? 'success' : 'danger')
+  }, [control.lastResult, control.lastOk, onEvent])
 
   const renderServiceRow = (service: ServiceStatus) => (
     <ServiceRow
@@ -549,12 +554,23 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
       pending={serviceControl.pendingId === service.id}
       onToggle={() => {
         const stopping = isServiceOn(service.state)
-        onEvent(`${stopping ? 'Stop' : 'Start'} ${service.display_name} requested`, stopping ? 'warning' : 'success')
-        serviceControl.toggle(service, services.refetch)
+        const verb = stopping ? 'Stop' : 'Start'
+        serviceControl.toggle(service, (result) => {
+          onEvent(
+            result.ok ? `${verb} ${service.display_name} succeeded` : `${verb} ${service.display_name} failed: ${result.detail}`,
+            result.ok ? 'success' : 'danger',
+          )
+          services.refetch()
+        })
       }}
       onRestart={() => {
-        onEvent(`${service.display_name} restart requested`, 'warning')
-        serviceControl.restart(service, services.refetch)
+        serviceControl.restart(service, (result) => {
+          onEvent(
+            result.ok ? `${service.display_name} restart succeeded` : `${service.display_name} restart failed: ${result.detail}`,
+            result.ok ? 'success' : 'danger',
+          )
+          services.refetch()
+        })
       }}
     />
   )
@@ -570,47 +586,47 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
           <button
             type="button"
             className="hud-control-button hud-control-button--blue"
-            onClick={() => runControl('Start OS', 'success', control.start)}
+            onClick={control.start}
             disabled={control.pending}
           >
             <PlayIcon />
-            Start OS
+            {control.pendingLabel === 'Start' ? 'Starting…' : 'Start OS'}
           </button>
           <button
             type="button"
             className="hud-control-button hud-control-button--red"
-            onClick={() => runControl('Stop OS', 'danger', control.stop)}
+            onClick={control.stop}
             disabled={control.pending}
           >
             <StopIcon />
-            Stop OS
+            {control.pendingLabel === 'Stop' ? 'Stopping…' : 'Stop OS'}
           </button>
           <button
             type="button"
             className="hud-control-button hud-control-button--amber"
-            onClick={() => runControl('Restart OS', 'warning', control.restart)}
+            onClick={control.restart}
             disabled={control.pending}
           >
             <RestartIcon />
-            Restart
+            {control.pendingLabel === 'Restart' ? 'Restarting…' : 'Restart'}
           </button>
           <button
             type="button"
             className="hud-control-button hud-control-button--blue"
-            onClick={() => runControl('Watchdog check', 'info', control.watchdog)}
+            onClick={control.watchdog}
             disabled={control.pending}
           >
             <ShieldIcon />
-            Watchdog
+            {control.pendingLabel === 'Watchdog' ? 'Checking…' : 'Watchdog'}
           </button>
           <button
             type="button"
             className="hud-control-button hud-control-button--red hud-control-button--full"
-            onClick={() => runControl('Force kill', 'danger', control.kill)}
+            onClick={control.kill}
             disabled={control.pending}
           >
             <KillIcon />
-            Force Kill
+            {control.pendingLabel === 'Kill' ? 'Killing…' : 'Force Kill'}
           </button>
         </div>
         {control.lastResult && <span className="hud-right-panel__note">{control.lastResult}</span>}
