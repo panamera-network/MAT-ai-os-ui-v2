@@ -144,6 +144,47 @@
   border-color: rgba(125, 230, 255, 0.4);
 }
 
+.card-detail-overlay__model-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.card-detail-overlay__model-form select,
+.card-detail-overlay__model-form input {
+  flex: 1 1 110px;
+  min-width: 90px;
+  padding: 6px 9px;
+  border: 1px solid rgba(184, 163, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(2, 8, 15, 0.5);
+  color: var(--hud-text);
+  font-family: var(--hud-font-mono);
+  font-size: calc(9px + var(--hud-font-boost-secondary));
+}
+
+.card-detail-overlay__model-form input::placeholder {
+  color: var(--hud-text-faint);
+}
+
+.card-detail-overlay__model-form select:focus,
+.card-detail-overlay__model-form input:focus {
+  outline: none;
+  border-color: rgba(125, 230, 255, 0.4);
+}
+
+.card-detail-overlay__model-form select:disabled,
+.card-detail-overlay__model-form input:disabled {
+  opacity: 0.5;
+}
+
+.card-detail-overlay__model-form .card-detail-overlay__promote-button {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
 .card-detail-overlay__list {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CAPABILITIES, TIERS, type Health, type KnowledgeItem, type KnowledgeWorkflowStatus, type Skill, type SkillVersion } from '../domain/vision'
+import { CAPABILITIES, TIERS, type Health, type KnowledgeItem, type KnowledgeWorkflowStatus, type Skill, type SkillVersion, type Tier } from '../domain/vision'
 import type { useAgents } from '../hooks/useAgents'
 import type { useLoops } from '../hooks/useLoops'
 import type { useModels } from '../hooks/useModels'
@@ -10,6 +10,7 @@ import type { useKnowledgeNotes } from '../hooks/useKnowledgeNotes'
 import type { useBudget } from '../hooks/useBudget'
 import { countKnowledgeByWorkflowStatus, RECENT_LEARNED_WINDOW_MS } from './HudLeftPanel'
 import { useVisionApi } from '../app/VisionApiProvider'
+import { useModelSelect } from '../hooks/useModelSelect'
 import { VisionApiError } from '../adapters/vision'
 import type { DetailCardId } from './detailCardId'
 import './CardDetailOverlay.css'
@@ -217,6 +218,72 @@ function LoopsListBody({ list }: { list: NonNullable<ReturnType<typeof useLoops>
   )
 }
 
+/** Compact operator control for `POST /models/select` — the ONE write path
+ * `useModelSelect`/the adapter already had fully built and simply wasn't
+ * wired to anything (see the audit this was built from). Free-text
+ * provider/model, matching the real contract: no discovery/catalog exists
+ * to populate a dropdown of valid values from. `models.refetch()` on
+ * success is the same "re-fetch after a real mutation" convention
+ * `KnowledgeNoteRow`'s own promote button already uses. */
+function ModelSelectForm({ models }: { models: ReturnType<typeof useModels> }) {
+  const { pending, lastResult, select } = useModelSelect()
+  const [capability, setCapability] = useState<string>(CAPABILITIES[0])
+  const [tier, setTier] = useState<Tier>('primary')
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
+
+  const canSubmit = Boolean(provider.trim() && model.trim()) && !pending
+
+  const submit = () => {
+    if (!canSubmit) return
+    select({ capability, tier, provider: provider.trim(), model: model.trim() }, () => {
+      models.refetch()
+      setProvider('')
+      setModel('')
+    })
+  }
+
+  return (
+    <>
+      <h3 className="card-detail-overlay__section-title">Set a tier</h3>
+      <div className="card-detail-overlay__model-form">
+        <select value={capability} onChange={(event) => setCapability(event.target.value)} disabled={pending}>
+          {CAPABILITIES.map((cap) => (
+            <option key={cap} value={cap}>
+              {cap}
+            </option>
+          ))}
+        </select>
+        <select value={tier} onChange={(event) => setTier(event.target.value as Tier)} disabled={pending}>
+          {TIERS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          placeholder="provider (e.g. ollama_cloud)"
+          value={provider}
+          onChange={(event) => setProvider(event.target.value)}
+          disabled={pending}
+        />
+        <input
+          type="text"
+          placeholder="model (e.g. gpt-oss:120b-cloud)"
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+          disabled={pending}
+        />
+        <button type="button" className="card-detail-overlay__promote-button" disabled={!canSubmit} onClick={submit}>
+          {pending ? 'Applying…' : 'Apply'}
+        </button>
+      </div>
+      {lastResult && <div className="card-detail-overlay__row-meta">{lastResult}</div>}
+    </>
+  )
+}
+
 function ModelsDetail({ models, budget, health }: { models: ReturnType<typeof useModels>; budget: ReturnType<typeof useBudget>; health: Health | null }) {
   const profiles = models.data?.profiles
   const configuredCapabilities = profiles ? CAPABILITIES.filter((capability) => TIERS.some((tier) => Boolean(profiles[capability]?.[tier]))) : []
@@ -292,6 +359,7 @@ function ModelsDetail({ models, budget, health }: { models: ReturnType<typeof us
           ))}
         </>
       )}
+      {profiles && <ModelSelectForm models={models} />}
       {!profiles && usage.length === 0 && !budget.data && <EmptyRow>Model data unavailable.</EmptyRow>}
     </div>
   )
