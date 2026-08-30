@@ -134,24 +134,22 @@ export function HomeScreen() {
         // Knowledge Note transition attention pass: `practicing ->
         // ready_for_promotion`/`practicing -> needs_relearn` specifically —
         // the two edges where a human actually needs to do something next
-        // (approve a promotion, or re-teach a failed note). These get their
-        // own event wording (no domain suffix — the chat notice below names
-        // the same note by topic alone) AND a one-shot chat companion
-        // notice; every other real transition (e.g. reviewed -> practicing,
-        // or -> promoted) keeps the general log entry it already had, so
-        // this is additive, never a second event for the same edge.
-        if (prevStatus === 'practicing' && (item.workflow_status === 'ready_for_promotion' || item.workflow_status === 'needs_relearn')) {
-          const isReady = item.workflow_status === 'ready_for_promotion'
-          addHudEvent(
-            `${isReady ? 'Ready for Promotion' : 'Needs Relearn'}: ${item.topic}`,
-            toHudEventTone(workflowBadgeTone(item.workflow_status)),
-          )
+        // (approve a promotion, or re-teach a failed note) — get a one-shot
+        // chat companion notice on top of the event every real transition
+        // already gets below. Recent Events audit: this used to ALSO give
+        // these two edges their own event wording ("Ready for Promotion:
+        // topic", no domain) while every other transition used the generic
+        // "Label 'topic' in domain" form -- a real, self-introduced
+        // inconsistency. Now unified: every transition's event uses the one
+        // generic form (matching the backend's own `_describe_learning_
+        // event` wording too), so only the CHAT notice stays special-cased.
+        const isAttentionEdge = prevStatus === 'practicing' && (item.workflow_status === 'ready_for_promotion' || item.workflow_status === 'needs_relearn')
+        if (isAttentionEdge) {
           notifyKnowledgeTransition(
-            isReady
+            item.workflow_status === 'ready_for_promotion'
               ? `Knowledge Note "${item.topic}" is ready for your approval.`
               : `Practice for "${item.topic}" failed — relearn required.`,
           )
-          continue
         }
 
         const suffix = item.domain ? ` in ${item.domain}` : ''

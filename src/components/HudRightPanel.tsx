@@ -140,13 +140,39 @@ function EventsIcon() {
   )
 }
 
+/** Recent Events audit: this used to be time-only, always -- ambiguous for
+ * anything not from today (the backend half of the merged feed can be
+ * hours/days old, see `useEvents`'s own doc comment). Same clock-time
+ * format for today's events (unchanged, the common case); a short date is
+ * prefixed only for an event from an earlier day. */
 function formatEventTime(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  const date = new Date(timestamp)
+  const time = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
-  }).format(new Date(timestamp))
+  }).format(date)
+  if (date.toDateString() === new Date().toDateString()) return time
+  const day = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
+  return `${day} ${time}`
+}
+
+/** Recent Events audit: the collapsed view's own "which N to show" pick was
+ * pure recency (`events.slice(0, limit)`) -- a burst of routine successes
+ * could silently push a recent failure out of view. `danger` candidates are
+ * now chosen first, then `warning`, then everything else -- `Array.sort` is
+ * stable, so ties keep their original (already newest-first) relative
+ * order, and the final selection is re-sorted back to newest-first for
+ * display, since this stays a chronological log, never a priority queue.
+ * A no-op (returns `events` as-is) once there are `limit` or fewer. */
+const EVENT_TONE_PRIORITY: Record<HudEventTone, number> = { danger: 0, warning: 1, success: 2, info: 2 }
+
+function selectVisibleEvents(events: HudEvent[], limit: number): HudEvent[] {
+  if (events.length <= limit) return events
+  const prioritized = [...events].sort((a, b) => EVENT_TONE_PRIORITY[a.tone] - EVENT_TONE_PRIORITY[b.tone])
+  const selected = new Set(prioritized.slice(0, limit))
+  return events.filter((event) => selected.has(event))
 }
 
 /** Real backend activity (`GET /events`) into the same `HudEvent` shape the
@@ -394,7 +420,10 @@ function PendingLearnCard({ onEvent }: { onEvent: AddHudEvent }) {
 
 function RecentEvents({ events }: { events: HudEvent[] }) {
   const [expanded, setExpanded] = useState(false)
-  const visibleEvents = expanded ? events : events.slice(0, 5)
+  // "View all" shows the complete chronological log, unchanged -- priority
+  // selection only matters for the collapsed view, where something has to
+  // be left out.
+  const visibleEvents = expanded ? events : selectVisibleEvents(events, 5)
 
   return (
     <div className="hud-right-panel__events-slot">
