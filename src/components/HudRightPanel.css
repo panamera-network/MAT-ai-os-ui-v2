@@ -74,6 +74,28 @@
   z-index: 1;
 }
 
+/* Attention consistency audit: same border+glow treatment (and the same
+   rgba values) as HudLeftPanel.css's `.hud-left-panel__card.is-attention` /
+   `.is-attention-danger` -- a real degraded/offline condition on the right
+   (a service down, Memory unreachable) used to only ever show as a small
+   colored text label with no card-level signal, unlike every left-panel
+   card carrying the same severity. */
+.hud-right-panel__card.is-attention {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0 0 1px rgba(245, 158, 11, 0.12),
+    0 14px 34px rgba(0, 0, 0, 0.13);
+}
+
+.hud-right-panel__card.is-attention-danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0 0 1px rgba(239, 68, 68, 0.12),
+    0 14px 34px rgba(0, 0, 0, 0.13);
+}
+
 .hud-right-panel__card--controls {
   background:
     linear-gradient(135deg, rgba(184, 163, 255, 0.1), transparent 52%),

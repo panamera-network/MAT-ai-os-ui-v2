@@ -482,6 +482,11 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
   }, [events, backendEvents.data])
 
   const allServices = services.data?.services ?? []
+  // Attention consistency audit: mirrors HudLeftPanel's is-attention trigger
+  // condition -- a real bad state (not the neutral stopped/unconfigured/
+  // unknown_service ones, not a mid-restart blip), so the card glows exactly
+  // when the existing amber `hud-service-row__state--degraded` text appears.
+  const servicesAttention = allServices.some((service) => service.state === 'degraded')
   const primaryServiceSlots = PRIMARY_SERVICES.map((target) => ({
     ...target,
     service: allServices.find((service) => service.id === target.id),
@@ -536,6 +541,12 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
     : 0
   const memoryNote = memory.error?.detail
     ?? (memory.data?.body_attached && !memoryStats ? 'Memory backend returned no statistics.' : null)
+  // Attention consistency audit: the red-tier states each of the three
+  // health rows can already independently show (mirrors the existing
+  // `.is-offline, .is-unavailable, .is-disconnected` red-text grouping in
+  // HudRightPanel.css) -- amber/checking states stay text-only, same
+  // "real bad states only" bar HudLeftPanel's own is-attention cards use.
+  const memoryAttentionDanger = qdrantState === 'offline' || memoryModuleState === 'unavailable' || vectorStoreState === 'disconnected'
 
   // Service Controls audit: this used to log "X requested" at CLICK time,
   // before the result was known -- Recent Events never actually reflected
@@ -577,7 +588,7 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
 
   return (
     <div className="hud-right-panel">
-      <section className="hud-right-panel__card hud-right-panel__card--controls">
+      <section className={`hud-right-panel__card hud-right-panel__card--controls${servicesAttention ? ' is-attention' : ''}`}>
         <header className="hud-right-panel__card-header">
           <GearIcon />
           <span>Controls</span>
@@ -656,7 +667,7 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
 
       <PendingLearnCard onEvent={onEvent} />
 
-      <section className="hud-right-panel__card hud-right-panel__memory-card">
+      <section className={`hud-right-panel__card hud-right-panel__memory-card${memoryAttentionDanger ? ' is-attention-danger' : ''}`}>
         <header className="hud-right-panel__card-header hud-memory__header">
           <span className="hud-memory__title"><DriveIcon />Memory</span>
           <span className={`hud-memory__headline hud-memory__headline--${qdrantState}`}>

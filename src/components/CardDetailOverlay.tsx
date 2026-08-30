@@ -11,6 +11,7 @@ import type { useBudget } from '../hooks/useBudget'
 import { countKnowledgeByWorkflowStatus, RECENT_LEARNED_WINDOW_MS } from './HudLeftPanel'
 import { useVisionApi } from '../app/VisionApiProvider'
 import { useModelSelect } from '../hooks/useModelSelect'
+import { describeOverlayStatus } from '../hooks/useVisionResource'
 import { VisionApiError } from '../adapters/vision'
 import type { DetailCardId } from './detailCardId'
 import './CardDetailOverlay.css'
@@ -1000,6 +1001,20 @@ function KnowledgeNotesDetail({ knowledgeNotes }: { knowledgeNotes: ReturnType<t
  * approve/deny route for them today, unlike Learn suggestions).
  */
 export function CardDetailOverlay({ cardId, agents, loops, models, governance, mcp, skills, knowledgeNotes, budget, health, onClose }: CardDetailOverlayProps) {
+  // Global empty/error-states audit: gate on the one resource each card is
+  // actually about, BEFORE falling through to that Detail component's own
+  // (otherwise ambiguous) "No X yet" text. `null` means the resource is
+  // genuinely ready — the Detail component's own empty-state text takes it
+  // from there, including a real zero-items response.
+  const cardResource = cardId === 'agents' ? agents
+    : cardId === 'loops' ? loops
+    : cardId === 'models' ? models
+    : cardId === 'governance' ? governance
+    : cardId === 'mcp' ? mcp
+    : cardId === 'skills' ? skills
+    : knowledgeNotes
+  const statusNote = describeOverlayStatus<unknown>(cardResource)
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -1028,13 +1043,19 @@ export function CardDetailOverlay({ cardId, agents, loops, models, governance, m
           </button>
         </header>
         <div className="card-detail-overlay__body">
-          {cardId === 'agents' && <AgentsDetail agents={agents} mcp={mcp} />}
-          {cardId === 'loops' && <LoopsDetail loops={loops} />}
-          {cardId === 'models' && <ModelsDetail models={models} budget={budget} health={health} />}
-          {cardId === 'governance' && <GovernanceDetail governance={governance} />}
-          {cardId === 'mcp' && <McpDetail mcp={mcp} />}
-          {cardId === 'skills' && <SkillsDetail skills={skills} />}
-          {cardId === 'knowledge' && <KnowledgeNotesDetail knowledgeNotes={knowledgeNotes} />}
+          {statusNote ? (
+            <EmptyRow>{statusNote}</EmptyRow>
+          ) : (
+            <>
+              {cardId === 'agents' && <AgentsDetail agents={agents} mcp={mcp} />}
+              {cardId === 'loops' && <LoopsDetail loops={loops} />}
+              {cardId === 'models' && <ModelsDetail models={models} budget={budget} health={health} />}
+              {cardId === 'governance' && <GovernanceDetail governance={governance} />}
+              {cardId === 'mcp' && <McpDetail mcp={mcp} />}
+              {cardId === 'skills' && <SkillsDetail skills={skills} />}
+              {cardId === 'knowledge' && <KnowledgeNotesDetail knowledgeNotes={knowledgeNotes} />}
+            </>
+          )}
         </div>
       </div>
     </div>

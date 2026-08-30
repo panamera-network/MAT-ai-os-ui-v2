@@ -146,3 +146,28 @@ export function describeResourceStatus<T>(resource: Pick<UseVisionResourceResult
   if (resource.error) return RESOURCE_STATUS_NOTE[resource.error.unreachable ? 'offline' : 'error']
   return null
 }
+
+/** Generic across every `BodyScoped<T>` response (duck-typed — resources
+ * with no `body_attached` field, like Models, just never match this and
+ * fall through). Moved here from HudLeftPanel so CardDetailOverlay can
+ * share the exact same check rather than growing its own copy. */
+export function isBodyDetached(data: unknown): boolean {
+  return typeof data === 'object' && data !== null && 'body_attached' in data && (data as { body_attached: unknown }).body_attached === false
+}
+
+/**
+ * Global empty/error-states audit: CardDetailOverlay's per-card Detail
+ * components only ever distinguished "empty" from nothing else — opening
+ * one before its first poll resolved, or while MAT was offline, or with
+ * no Body attached, fell through to the SAME "No X yet" text a
+ * genuinely-empty, fully-loaded response gets. This is the one check run
+ * before a Detail component ever gets to decide "empty" for itself,
+ * covering all four not-yet-real-data cases with the one shared
+ * vocabulary `describeResourceStatus` already established; `null` means
+ * the resource is genuinely ready and the caller's own empty-state text
+ * should be trusted.
+ */
+export function describeOverlayStatus<T>(resource: Pick<UseVisionResourceResult<T>, 'data' | 'loading' | 'error'>): string | null {
+  if (resource.data) return isBodyDetached(resource.data) ? 'No Body attached.' : null
+  return describeResourceStatus(resource)
+}

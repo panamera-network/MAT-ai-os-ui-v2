@@ -8,7 +8,7 @@ import type { useMcp } from '../hooks/useMcp'
 import type { useSkills } from '../hooks/useSkills'
 import type { useBudget } from '../hooks/useBudget'
 import type { useKnowledgeNotes } from '../hooks/useKnowledgeNotes'
-import { formatResourceValue } from '../hooks/useVisionResource'
+import { formatResourceValue, isBodyDetached } from '../hooks/useVisionResource'
 import type { DetailCardId } from './detailCardId'
 import './HudLeftPanel.css'
 
@@ -176,10 +176,6 @@ interface ResourceStateSource {
  * `body_attached: false` — a genuine "MAT answered, but no V2Body is
  * running" fact, never guessed for a shape that doesn't carry the field at
  * all (e.g. `ModelsResult`, MAT's own registry, isn't Body-scoped). */
-function isBodyDetached(data: unknown): boolean {
-  return typeof data === 'object' && data !== null && 'body_attached' in data && (data as { body_attached: unknown }).body_attached === false
-}
-
 function getResourceState(resource: ResourceStateSource): { label: string; tone: string } {
   if (resource.data) {
     if (isBodyDetached(resource.data)) return { label: 'no body', tone: 'degraded' }
