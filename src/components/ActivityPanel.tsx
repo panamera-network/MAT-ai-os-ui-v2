@@ -18,6 +18,7 @@ interface ActivityPanelProps {
   onReset: () => void
   voiceState: VoiceState
   voiceError: string | null
+  voiceErrorSeverity: 'error' | 'info'
   onStartRecording: () => void
   onStopRecording: () => void
   speakingId: string | null
@@ -311,6 +312,7 @@ export function ActivityPanel({
   onReset,
   voiceState,
   voiceError,
+  voiceErrorSeverity,
   onStartRecording,
   onStopRecording,
   speakingId,
@@ -555,7 +557,11 @@ export function ActivityPanel({
               </button>
             </span>
           )}
-          {voiceError && <span className="activity-panel__voice-error">{voiceError}</span>}
+          {voiceError && (
+            <span className={`activity-panel__voice-error${voiceErrorSeverity === 'info' ? ' activity-panel__voice-error--info' : ''}`}>
+              {voiceError}
+            </span>
+          )}
         </div>
       )}
 
@@ -580,7 +586,7 @@ export function ActivityPanel({
           type="button"
           className="activity-panel__tool-btn"
           onClick={pickFile}
-          disabled={!online || pending}
+          disabled={!online || pending || documentState === 'parsing'}
           aria-label="Attach an image or document"
           title="Attach an image (Vision) or a document (PDF/TXT/MD/CSV)"
         >

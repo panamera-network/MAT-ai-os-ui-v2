@@ -295,6 +295,13 @@ export function useThink(): UseThinkResult {
   }
 
   const attachDocument = async (file: File) => {
+    // Chat controls audit: the UI's own Attach button now disables while
+    // `documentState === 'parsing'` (see `ActivityPanel`), but this guard
+    // stays here too, same "never trust the caller alone" treatment
+    // `send`/`sendLearn`/`sendImage` already give `pending` -- without it, a
+    // second concurrent `readDocument()` call could resolve AFTER the
+    // first and silently overwrite it with the wrong file's result.
+    if (documentState === 'parsing') return
     setDocumentState('parsing')
     setDocumentError(null)
     try {

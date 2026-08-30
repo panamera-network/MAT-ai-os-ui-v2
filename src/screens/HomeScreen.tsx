@@ -88,7 +88,7 @@ export function HomeScreen() {
     reset,
     notifyKnowledgeTransition,
   } = useThink()
-  const { voiceState, voiceError, startRecording, stopRecording } = useVoice(send)
+  const { voiceState, voiceError, voiceErrorSeverity, startRecording, stopRecording } = useVoice(send)
   const { speakingId, speak } = useSpeak()
   const [hudEvents, setHudEvents] = useState<HudEvent[]>([])
 
@@ -219,6 +219,7 @@ export function HomeScreen() {
           onReset={reset}
           voiceState={voiceState}
           voiceError={voiceError}
+          voiceErrorSeverity={voiceErrorSeverity}
           onStartRecording={startRecording}
           onStopRecording={stopRecording}
           speakingId={speakingId}

@@ -479,6 +479,14 @@
   font-size: calc(9px + var(--hud-font-boost-secondary));
 }
 
+/* Chat controls audit: "couldn't make out what you said" is a normal,
+   freely-retryable outcome, never a failure -- it stays honest (never
+   hidden) but reads as a muted hint instead of sharing the red error
+   treatment above. */
+.activity-panel__voice-error--info {
+  color: var(--hud-text-faint);
+}
+
 .activity-panel__tools-row {
   flex: 0 0 auto;
   display: flex;

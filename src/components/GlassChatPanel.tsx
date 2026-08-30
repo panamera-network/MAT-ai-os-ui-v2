@@ -17,6 +17,7 @@ interface GlassChatPanelProps {
   onReset: () => void
   voiceState: VoiceState
   voiceError: string | null
+  voiceErrorSeverity: 'error' | 'info'
   onStartRecording: () => void
   onStopRecording: () => void
   speakingId: string | null
