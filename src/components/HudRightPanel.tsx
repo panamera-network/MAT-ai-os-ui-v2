@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { hasMemoryStats, isServiceOn } from '../domain/vision'
-import type { LearnSuggestionDetail, LearnSuggestionSummary, ServiceStatus, VisionEventEntry } from '../domain/vision'
+import type { LearnSuggestionDetail, LearnSuggestionSummary, QueuedActionSummary, ServiceStatus, VisionEventEntry } from '../domain/vision'
 import { useServices } from '../hooks/useServices'
 import { useMemoryStats } from '../hooks/useMemoryStats'
+import { PROFILE_DELETE_ID, useUserMemory } from '../hooks/useUserMemory'
 import { useBodyControl } from '../hooks/useBodyControl'
 import { useServiceControl } from '../hooks/useServiceControl'
 import { useEvents } from '../hooks/useEvents'
 import { usePendingLearn } from '../hooks/usePendingLearn'
+import { usePendingApprovalQueue } from '../hooks/usePendingApprovalQueue'
 import { describeResourceStatus } from '../hooks/useVisionResource'
 import type { AddHudEvent, HudEvent, HudEventTone } from './hudEvents'
 import './HudRightPanel.css'
@@ -418,6 +420,99 @@ function PendingLearnCard({ onEvent }: { onEvent: AddHudEvent }) {
   )
 }
 
+interface QueueTaskRowProps {
+  task: QueuedActionSummary
+  busy: boolean
+  lastResult: { taskId: string; status: string; result: string | null; error: string | null } | null
+  onResolve: (taskId: string, action: 'approve' | 'reject') => void
+}
+
+/** One real `TaskQueue` record a Law/Contract/Rule verdict deferred to a
+ * human — the Governed Action Bridge's own approval gate, distinct from
+ * Learn's new-domain suggestions above. Always shows the raw task text
+ * (there is nothing more sanitized to show in its place) plus WHY it was
+ * deferred (`stage`/`action`) and WHO triggered it — never a further
+ * expand-to-fetch-detail: `GET /queue/pending-approval/{id}` itself 404s
+ * once a task stops being `pending_approval` (the same status gate
+ * `approve`/`reject` enforce), so fetching it after resolving would just
+ * fail — the real outcome only ever comes from the resolve action's own
+ * response, shown via `lastResult` below. */
+function QueueTaskRow({ task, busy, lastResult, onResolve }: QueueTaskRowProps) {
+  const result = lastResult?.taskId === task.id ? lastResult : null
+
+  return (
+    <div className="hud-pending-learn-row">
+      <div className="hud-pending-learn-row__summary hud-pending-learn-row__summary--static">
+        <span className="hud-pending-learn-row__dot" aria-hidden="true" />
+        <span className="hud-pending-learn-row__domain">{task.task}</span>
+        <span className="hud-pending-learn-row__reason">{task.detail ?? task.action ?? task.stage ?? 'pending approval'}</span>
+        <time>{formatSuggestionTime(task.created_at)}</time>
+      </div>
+      <div className="hud-pending-learn-row__detail">
+        <div className="hud-pending-learn-row__field">
+          <span>Requested by</span>
+          <strong>{task.user_id}</strong>
+        </div>
+        {result ? (
+          <span className={`hud-pending-learn-row__result hud-pending-learn-row__result--${result.status === 'rejected' ? 'rejected' : result.status === 'failed' ? 'failed' : 'reviewed'}`}>
+            {result.status === 'rejected' ? 'Rejected.' : result.error ? `Failed — ${result.error}` : `${result.status}${result.result ? ` — ${result.result}` : ''}`}
+          </span>
+        ) : (
+          <div className="hud-pending-learn-row__actions">
+            <button type="button" className="hud-pending-learn-row__approve" disabled={busy} onClick={() => onResolve(task.id, 'approve')}>
+              Approve
+            </button>
+            <button type="button" className="hud-pending-learn-row__reject" disabled={busy} onClick={() => onResolve(task.id, 'reject')}>
+              Reject
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Real `GET /queue/pending-approval` queue — the Governed Action Bridge's
+ * own human-approval gate for an ACTION MAT wants to execute (never a chat
+ * reply). Same visual language and refetch-after-resolve convention as
+ * `PendingLearnCard` above, kept as a separate card since it's a genuinely
+ * different approval concept (an action pending execution, not a proposed
+ * new skill) — no shared abstraction invented to fold them into one. */
+function GovernedActionQueueCard({ onEvent }: { onEvent: AddHudEvent }) {
+  const { items, loading, pendingId, lastResult, resolve } = usePendingApprovalQueue()
+
+  useEffect(() => {
+    if (!lastResult) return
+    const message = lastResult.status === 'rejected'
+      ? 'Pending action rejected'
+      : lastResult.error
+        ? `Pending action failed — ${lastResult.error}`
+        : 'Pending action approved'
+    onEvent(message, lastResult.status === 'rejected' ? 'warning' : lastResult.error ? 'danger' : 'success')
+  }, [lastResult, onEvent])
+
+  if (!loading && items.length === 0) return null
+
+  return (
+    <section className="hud-right-panel__card hud-pending-learn-card">
+      <header className="hud-right-panel__card-header">
+        <ShieldIcon />
+        <span>Action Approvals</span>
+        {items.length > 0 && <span className="hud-pending-learn-card__count">{items.length}</span>}
+      </header>
+      <div className="hud-pending-learn-card__list">
+        {loading && items.length === 0 ? (
+          <span className="hud-right-panel__events-empty">Loading…</span>
+        ) : (
+          items.map((task) => (
+            <QueueTaskRow key={task.id} task={task} busy={pendingId === task.id} lastResult={lastResult} onResolve={resolve} />
+          ))
+        )}
+      </div>
+    </section>
+  )
+}
+
 function RecentEvents({ events }: { events: HudEvent[] }) {
   const [expanded, setExpanded] = useState(false)
   // "View all" shows the complete chronological log, unchanged -- priority
@@ -458,6 +553,82 @@ function RecentEvents({ events }: { events: HudEvent[] }) {
   )
 }
 
+function formatMemoryDate(iso: string | null): string {
+  if (!iso) return '—'
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(parsed)
+}
+
+/**
+ * Real `GET /memory/user` (durable facts MAT has stored about the caller)
+ * and `GET /memory/profile` (learned communication style) plus their two
+ * real deletes — a dev/operator inspection-and-erase view, collapsed by
+ * default (same "View all"-style toggle `Service Controls` already uses)
+ * so it doesn't compete with the tier-stats glance above for attention.
+ */
+function UserMemoryDetail({ userMemory, onEvent }: { userMemory: ReturnType<typeof useUserMemory>; onEvent: AddHudEvent }) {
+  const memories = userMemory.memories.data?.memories ?? []
+  const profile = userMemory.profile.data
+
+  useEffect(() => {
+    if (!userMemory.lastResult) return
+    onEvent(
+      userMemory.lastResult.ok ? userMemory.lastResult.detail : `Delete failed: ${userMemory.lastResult.detail}`,
+      userMemory.lastResult.ok ? 'success' : 'danger',
+    )
+  }, [userMemory.lastResult, onEvent])
+
+  return (
+    <div className="hud-right-panel__memory-detail">
+      <h3 className="hud-right-panel__subsection-title">Your memories</h3>
+      {memories.length === 0 ? (
+        <span className="hud-right-panel__events-empty">MAT hasn't stored anything durable about you yet.</span>
+      ) : (
+        memories.map((entry) => (
+          <div key={entry.id} className="hud-right-panel__memory-entry">
+            <span className="hud-right-panel__memory-entry-content">{entry.content}</span>
+            <span className="hud-right-panel__memory-entry-meta">{formatMemoryDate(entry.created_at)}</span>
+            <button
+              type="button"
+              className="hud-right-panel__memory-entry-delete"
+              disabled={userMemory.pendingId === entry.id}
+              onClick={() => {
+                if (window.confirm('Delete this memory? MAT will no longer recall it.')) userMemory.deleteMemory(entry.id)
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        ))
+      )}
+      <h3 className="hud-right-panel__subsection-title">Conversation Profile</h3>
+      {!profile?.exists || Object.keys(profile.dimensions).length === 0 ? (
+        <span className="hud-right-panel__events-empty">No learned communication style yet.</span>
+      ) : (
+        <>
+          {Object.entries(profile.dimensions).map(([name, dimension]) => (
+            <div key={name} className="hud-right-panel__memory-entry">
+              <span className="hud-right-panel__memory-entry-content">{name}: {dimension.value}</span>
+              <span className="hud-right-panel__memory-entry-meta">{Math.round(dimension.confidence * 100)}% confidence · {dimension.source}</span>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="hud-right-panel__memory-entry-delete"
+            disabled={userMemory.pendingId === PROFILE_DELETE_ID}
+            onClick={() => {
+              if (window.confirm('Reset the Conversation Profile? MAT forgets how it has learned to talk to you.')) userMemory.deleteProfile()
+            }}
+          >
+            Reset profile
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 interface HudRightPanelProps {
   events: HudEvent[]
   onEvent: AddHudEvent
@@ -467,10 +638,12 @@ interface HudRightPanelProps {
 export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
   const services = useServices()
   const memory = useMemoryStats()
+  const userMemory = useUserMemory()
   const control = useBodyControl()
   const serviceControl = useServiceControl()
   const backendEvents = useEvents()
   const [showAllServices, setShowAllServices] = useState(false)
+  const [showMemoryDetail, setShowMemoryDetail] = useState(false)
 
   // Real MAT activity (error log + learning analytics, merged server-side)
   // alongside this session's own UI-action markers — two genuinely different
@@ -615,7 +788,9 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
           <button
             type="button"
             className="hud-control-button hud-control-button--amber"
-            onClick={control.restart}
+            onClick={() => {
+              if (window.confirm('Restart MAT? This briefly stops, then starts, the whole running body.')) control.restart()
+            }}
             disabled={control.pending}
           >
             <RestartIcon />
@@ -633,7 +808,9 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
           <button
             type="button"
             className="hud-control-button hud-control-button--red hud-control-button--full"
-            onClick={control.kill}
+            onClick={() => {
+              if (window.confirm('Force kill MAT? This is an emergency stop — any in-progress work is dropped.')) control.kill()
+            }}
             disabled={control.pending}
           >
             <KillIcon />
@@ -666,6 +843,7 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
       </section>
 
       <PendingLearnCard onEvent={onEvent} />
+      <GovernedActionQueueCard onEvent={onEvent} />
 
       <section className={`hud-right-panel__card hud-right-panel__memory-card${memoryAttentionDanger ? ' is-attention-danger' : ''}`}>
         <header className="hud-right-panel__card-header hud-memory__header">
@@ -707,6 +885,20 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
           <div><span>Vector store</span><strong className={`is-${vectorStoreState}`}>{vectorStoreState}</strong></div>
         </div>
         {memoryNote && <div className="hud-memory__error"><span>Last state</span>{memoryNote}</div>}
+        <div className="hud-right-panel__subsection">
+          <button
+            type="button"
+            className="hud-right-panel__view-all"
+            onClick={() => setShowMemoryDetail((prev) => !prev)}
+            aria-expanded={showMemoryDetail}
+          >
+            <span>{showMemoryDetail ? 'Hide your memory' : 'View your memory'}</span>
+            <span style={{ '--chevron-rotate': showMemoryDetail ? '90deg' : '0deg' } as CSSProperties} className="hud-right-panel__chevron">
+              <ChevronIcon />
+            </span>
+          </button>
+          {showMemoryDetail && <UserMemoryDetail userMemory={userMemory} onEvent={onEvent} />}
+        </div>
       </section>
 
       <RecentEvents events={mergedEvents} />

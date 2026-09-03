@@ -1,6 +1,7 @@
 import type {
   AgentsResult,
   BudgetResult,
+  ConversationProfileResult,
   ControlActionResult,
   ControlStatusResult,
   DocumentReadResult,
@@ -16,13 +17,18 @@ import type {
   LearnSuggestionDetail,
   ListenRequest,
   ListenResult,
+  LoopActionResult,
+  LoopRunNowResult,
   LoopsResult,
+  McpApprovalActionResult,
   McpResult,
   MemoryResult,
   ModelSelectRequest,
   ModelsResult,
+  PendingApprovalQueueResult,
   PendingLearnSuggestionsResult,
   PromoteKnowledgeResult,
+  QueuedActionDetail,
   RestartResult,
   SeeRequest,
   SeeResult,
@@ -31,6 +37,7 @@ import type {
   ServiceStartStopResult,
   ServicesResult,
   ServiceStatus,
+  SkillRollbackResult,
   SkillsResult,
   SkillVersionsResult,
   SoulResult,
@@ -40,6 +47,7 @@ import type {
   StopResult,
   ThinkRequest,
   ThinkResult,
+  UserMemoriesResult,
   WatchdogResult,
 } from '../../domain/vision'
 
@@ -80,15 +88,31 @@ export interface VisionApiAdapter {
 
   getAgents(signal?: AbortSignal): Promise<AgentsResult>
   getLoops(signal?: AbortSignal): Promise<LoopsResult>
+  getLoop(loopId: string, signal?: AbortSignal): Promise<LoopActionResult>
+  pauseLoop(loopId: string, signal?: AbortSignal): Promise<LoopActionResult>
+  startLoop(loopId: string, signal?: AbortSignal): Promise<LoopActionResult>
+  runLoopNow(loopId: string, signal?: AbortSignal): Promise<LoopRunNowResult>
   getEvents(limit?: number, signal?: AbortSignal): Promise<EventsResult>
   getMemory(signal?: AbortSignal): Promise<MemoryResult>
+  getUserMemories(signal?: AbortSignal): Promise<UserMemoriesResult>
+  deleteUserMemory(memoryId: string, signal?: AbortSignal): Promise<void>
+  getConversationProfile(signal?: AbortSignal): Promise<ConversationProfileResult>
+  deleteConversationProfile(signal?: AbortSignal): Promise<void>
   getGovernance(signal?: AbortSignal): Promise<GovernanceResult>
   getMcp(signal?: AbortSignal): Promise<McpResult>
+  approveMcpApproval(approvalId: string, signal?: AbortSignal): Promise<McpApprovalActionResult>
+  denyMcpApproval(approvalId: string, reason?: string, signal?: AbortSignal): Promise<McpApprovalActionResult>
   getSkills(signal?: AbortSignal): Promise<SkillsResult>
   getSkillVersions(skillId: string, signal?: AbortSignal): Promise<SkillVersionsResult>
+  rollbackSkill(skillId: string, signal?: AbortSignal): Promise<SkillRollbackResult>
   getKnowledge(domain?: string, signal?: AbortSignal): Promise<KnowledgeResult>
   getKnowledgeItem(knowledgeId: string, signal?: AbortSignal): Promise<KnowledgeItemResult>
   promoteKnowledge(knowledgeId: string, signal?: AbortSignal): Promise<PromoteKnowledgeResult>
+
+  getPendingApprovalQueue(signal?: AbortSignal): Promise<PendingApprovalQueueResult>
+  getPendingApprovalTask(taskId: string, signal?: AbortSignal): Promise<QueuedActionDetail>
+  approvePendingApprovalTask(taskId: string, signal?: AbortSignal): Promise<QueuedActionDetail>
+  rejectPendingApprovalTask(taskId: string, signal?: AbortSignal): Promise<QueuedActionDetail>
 
   getModels(signal?: AbortSignal): Promise<ModelsResult>
   selectModel(request: ModelSelectRequest, signal?: AbortSignal): Promise<ModelsResult>

@@ -20,12 +20,12 @@ does today (2026-08-20).
 - Content type: JSON for every route except `/see` (multipart form), `/listen`
   (multipart form), and `/speak` (JSON in, raw audio bytes out with the TTS
   provider's own `content_type`).
-- **No WebSocket.** `api/app.py`'s own module docstring states this explicitly:
-  "Deliberately does NOT port V1's 227-route surface... No WebSocket: every one of
-  those five interactions is a single bounded request/response." A grep of the
-  entire `api/` package confirms zero `@app.websocket` routes. The old UI's
-  `config.ts` defines a `WS_URL` and ships a `useSocket` hook — both are vestigial;
-  see [OLD_UI_REFERENCE.md](./OLD_UI_REFERENCE.md).
+- **One WebSocket route exists**: `WS /listen/stream` (Streaming Voice, added after
+  this document's original "no WebSocket" survey) — half-duplex, turn-based audio
+  in / transcript+response+audio out over one connection. Not adopted by this UI
+  yet (out of scope for Implement #13A) — every other route stays single bounded
+  request/response, and the old UI's `config.ts`/`useSocket` remain vestigial
+  either way; see [OLD_UI_REFERENCE.md](./OLD_UI_REFERENCE.md).
 
 ## Authentication
 
@@ -145,6 +145,42 @@ Thin wrapper over `iammat/control/supervisor.py::Control` and
 | { healthy: false, action: "recovery_failed", attempts: RestartResult[], kill: KillResult }  // gave up, killed
 ```
 
+## Governed Action Queue (`/queue/pending-approval*`) — owner required
+
+A real `TaskQueue` record that a Law/Contract/Rule verdict deferred to a human —
+distinct from Skills' Learn-suggestion queue (a proposed new skill, not an action
+pending execution).
+
+```ts
+interface QueuedActionSummary {
+  id: string
+  status: "pending_approval" | "running" | "completed" | "failed" | "blocked" | "timed_out" | "rejected"
+  task: string              // the raw request text — the thing actually being approved
+  stage: string | null
+  action: string | null
+  detail: string | null
+  user_id: string            // who originally triggered the action — the identity it still executes AS
+  created_at: string
+  resolved_by: string | null // the approver; null until a human acts
+  resolved_at: string | null
+}
+interface QueuedActionDetail extends QueuedActionSummary {
+  result: string | null       // populated only once resolved
+  error: string | null
+}
+```
+
+| Route | Method | Result shape |
+|---|---|---|
+| `/queue/pending-approval` | GET | `{ items: QueuedActionSummary[] }` |
+| `/queue/pending-approval/{id}` | GET | `QueuedActionDetail` directly |
+| `/queue/pending-approval/{id}/approve` | POST | `QueuedActionDetail` — claims the record exactly once (atomic CAS) then runs it through the real governed spine |
+| `/queue/pending-approval/{id}/reject` | POST | `QueuedActionDetail` — atomic CAS straight to `"rejected"`; the governed spine is never invoked |
+
+`404` for an unknown/non-existent task id or one no longer `pending_approval`
+(shown as `404` from the detail route once it's moved past that status);
+approve/reject both return `409` if a concurrent call already resolved the record.
+
 ## Agents — `GET /agents`, auth required
 
 ```ts
@@ -187,10 +223,19 @@ interface Loop {
   created_at: string
 }
 ```
-Sorted newest-first by `created_at`. There is currently no route to create/pause/
-resume a loop from outside — `loops.py` has `create_loop`/`pause_loop`/`start_loop`
-methods, but `app.py` only exposes the read (`GET /loops`). Don't build create/pause
-controls against a route that doesn't exist yet.
+Sorted newest-first by `created_at`. `GET /loops/{id}` returns `{ loop: Loop }` (the
+same real record, one at a time). Operator control over an *existing* loop is real:
+
+| Route | Method | Result shape |
+|---|---|---|
+| `/loops/{id}/pause` | POST | `{ loop: Loop }` — stops firing, keeps the definition |
+| `/loops/{id}/start` | POST | `{ loop: Loop }` — (re)activates a paused loop; does not itself execute anything |
+| `/loops/{id}/run-now` | POST | `{ loop: Loop, outcome: string }` — `outcome` is the engine's own real string: `"executed"`, `"skipped_not_active"` (paused — never silently reactivated), or `"skipped_already_running"` (overlap guard: a concurrent scheduled fire or another run-now already has this loop mid-run) |
+
+Still no create/delete route — only the three existing default loops (Midnight
+Maintenance / Overnight Knowledge Practice / Proactive Suggestion Sweep) can be
+operated, never a new one seeded. All three action routes are owner-gated
+(`_require_owner`, not just `_require_principal`).
 
 ## Memory — `GET /memory`, auth required
 
@@ -225,6 +270,44 @@ caller. **A consumer must handle `tiers` being `{}`.**
 from `tiers` — see `MemoryHealth` in `api/schemas.py` and `Body.check_memory_health`
 (MAT-AI-OS-V2) for the exact composition. Always present, even when `tiers` is `{}`
 or `body_attached` is `false`.
+
+### `GET /memory/user`, `DELETE /memory/user/{id}` — auth required
+
+```ts
+{ body_attached: bool, memories: UserMemoryEntry[] }
+
+interface UserMemoryEntry {
+  id: string
+  content: string
+  metadata: Record<string, unknown>
+  created_at: string | null
+}
+```
+The caller's own durable (`MemoryType.USER`) memories, individually — mem0's own
+`user_id` filter makes a cross-user result structurally impossible. Excludes the
+caller's own Conversation Profile record (same memory_type, a different category —
+see below). `DELETE /memory/user/{id}` returns `204 No Content`; a memory that
+doesn't exist, or belongs to someone else, both return `404` (never a `403` that
+would leak which case it was).
+
+### `GET /memory/profile`, `DELETE /memory/profile` — auth required
+
+```ts
+{ body_attached: bool, exists: bool, dimensions: Record<string, ConversationProfileDimension> }
+
+interface ConversationProfileDimension {
+  value: string
+  confidence: number
+  evidence_count: number
+  source: "explicit" | "inferred"
+  last_updated: string
+}
+```
+A single point lookup at a fixed, per-user deterministic id — never a listing/search.
+`exists: false` with empty `dimensions` is a real, non-error state (no profile
+learned yet). Only TRUSTED dimensions are ever exposed — one still accumulating
+evidence is never shown here, same as it's never injected into `/think`'s own
+context. `DELETE /memory/profile` returns `204 No Content`.
 
 ## Events — `GET /events?limit=50`, auth required
 
@@ -298,12 +381,21 @@ interface McpApproval {
   granting_skills_requested: boolean
 }
 ```
-Read-only — there is no `/mcp/approvals/{id}/approve|deny` route in this API today,
-even though the underlying `mcp_approvals.py` module supports resolving approvals
-internally. A UI cannot act on a pending approval through this contract yet, only
-observe it. (`McpApproval` above is the commonly-populated subset of a much larger
-internal record — `mcp_approvals.py` is 3000+ lines with additional bookkeeping
-fields for retries/outbox delivery that aren't relevant to a UI consumer.)
+`McpApproval` above is the commonly-populated subset of a much larger internal
+record — `mcp_approvals.py` is 3000+ lines with additional bookkeeping fields for
+retries/outbox delivery that aren't relevant to a UI consumer.
+
+### `POST /mcp/approvals/{id}/approve|deny` — owner required
+
+```ts
+{ approval: McpApproval }   // the resolved record, verbatim
+```
+`approve` is the ONE place a pending outbound MCP tool call actually executes —
+routes through `body.mcp.dispatcher` (never the bare manager), so a
+`server="whatsapp"`/`"email"` approval reaches its own real sender. `deny` (optional
+`?reason=` query param) only discards the pending call, never dispatches. Both
+enforce ownership (a different user's approval can never be resolved through this
+route — `403` on mismatch) and reject an already-resolved approval with `409`.
 
 ## Skills — `GET /skills`, auth required
 
@@ -329,18 +421,47 @@ No `kind: 'ability' | 'content'` field server-side — the old UI's own comment 
 `BackendContext.tsx` already documents this as a client-only computed field that
 V2 doesn't provide yet. Keep that honest in V2 rather than inventing a fake value.
 
-## Models — `GET /models`, `POST /models/select`, auth required
-
-MAT's **own** model registry only — never Body's. Eight fixed capabilities, four
-fixed tiers each:
+### `GET /skills/{id}/versions`, `POST /skills/{id}/rollback` — auth required
 
 ```ts
-type Capability = "FAST" | "THINKING" | "EXPERT" | "VISION" | "VOICE" | "VIDEO" | "EMBEDDING" | "RERANKER"
+// GET /skills/{id}/versions:
+{ body_attached: bool, skill_id: string, versions: SkillVersion[] }
+
+interface SkillVersion {
+  version_id: string
+  skill_id: string
+  owner_user_id: string | null
+  provenance: string
+  reason: string
+  created_at: string
+  data: Record<string, unknown>   // the skill-dict snapshot BEFORE the update this record was saved for
+}
+
+// POST /skills/{id}/rollback:
+{ skill: Record<string, unknown> }   // the restored candidate record, verbatim
+```
+`rollback` exposes the existing, unmodified `LearningPipelineEngine.rollback_skill`
+— one step back only (the most recent approved-then-superseded version), never an
+arbitrary historical one, never auto-triggered. `404` for an unknown skill, `403`
+for the wrong owner, `400` for a legacy global/builtin lineage, `409` for no prior
+version to roll back to (or a genuine concurrent conflict).
+
+## Models — `GET /models`, `POST /models/select`, auth required
+
+MAT's **own** model registry only — never Body's. Ten fixed capabilities
+(`model_registry.py::CAPABILITIES`, verbatim order), four fixed tiers each:
+
+```ts
+type Capability = "FAST" | "THINKING" | "EXPERT" | "VISION" | "VOICE" | "VOICE_STT" | "VOICE_TTS" | "VIDEO" | "EMBEDDING" | "RERANKER"
 type Tier = "primary" | "fallback_local" | "fallback_cloud" | "fallback_api"
 
 // GET /models and POST /models/select both respond:
 { profiles: Record<Capability, Partial<Record<Tier, { provider: string, model: string } | null>>> }
 ```
+`VOICE_STT`/`VOICE_TTS` are the capabilities `Voice` actually resolves for STT/TTS
+dispatch (`_resolve_voice_slot_kwargs`) — the combined `VOICE` slot is a separate,
+third capability, not an alias for either.
+
 `POST /models/select` body: `{ capability: string, tier?: string (default "primary"),
 provider?: string | null, model?: string | null }` — passing both `provider` and
 `model` as `null`/omitted **clears** that tier's slot. `422` for an unknown

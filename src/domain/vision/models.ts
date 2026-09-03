@@ -1,6 +1,9 @@
-/** MAT's own model registry only — never Body's. Eight fixed capabilities,
- * never a discovery/catalog endpoint. */
-export const CAPABILITIES = ['FAST', 'THINKING', 'EXPERT', 'VISION', 'VOICE', 'VIDEO', 'EMBEDDING', 'RERANKER'] as const
+/** MAT's own model registry only — never Body's. Ten fixed capabilities
+ * (`model_registry.py::CAPABILITIES`, verbatim order) — `VOICE_STT`/
+ * `VOICE_TTS` are the ones `Voice` actually resolves for STT/TTS dispatch;
+ * the combined `VOICE` slot is a separate, third capability. Never a
+ * discovery/catalog endpoint. */
+export const CAPABILITIES = ['FAST', 'THINKING', 'EXPERT', 'VISION', 'VOICE', 'VOICE_STT', 'VOICE_TTS', 'VIDEO', 'EMBEDDING', 'RERANKER'] as const
 export type Capability = (typeof CAPABILITIES)[number]
 
 export const TIERS = ['primary', 'fallback_local', 'fallback_cloud', 'fallback_api'] as const

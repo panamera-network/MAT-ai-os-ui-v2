@@ -47,3 +47,45 @@ export interface MemoryHealth {
 }
 
 export type MemoryResult = BodyScoped<{ tiers: MemoryTiers; health: MemoryHealth }>
+
+/**
+ * `GET /memory/user` — the caller's own durable (MemoryType.USER) memories
+ * only; mem0's own `user_id` filter makes a cross-user result structurally
+ * impossible. Excludes the caller's own Conversation Profile record (same
+ * memory_type, a different category — see `ConversationProfileDimension`
+ * below) — it's a structured dimension blob, not a human-readable fact.
+ */
+export interface UserMemoryEntry {
+  id: string
+  content: string
+  metadata: Record<string, unknown>
+  created_at: string | null
+}
+
+export type UserMemoriesResult = BodyScoped<{ memories: UserMemoryEntry[] }>
+
+/**
+ * One learned communication-STYLE dimension for the caller — never a fact
+ * about them (see `UserMemoryEntry` for that). `source` is `"explicit"`
+ * (the user directly stated/corrected this) or `"inferred"` (observed
+ * across sessions, evidence-gated before it's ever exposed here — a still-
+ * accumulating candidate never appears, same as it's never injected into
+ * /think's own context).
+ */
+export interface ConversationProfileDimension {
+  value: string
+  confidence: number
+  evidence_count: number
+  source: string
+  last_updated: string
+}
+
+/** `GET /memory/profile` — a single point lookup at a fixed, per-user
+ * deterministic id (never a listing/search). `exists: false` with an empty
+ * `dimensions` is a real, non-error state (no profile learned yet), not
+ * distinguishable here from `body_attached: false` — both render the same
+ * "nothing to show" case. */
+export type ConversationProfileResult = BodyScoped<{
+  exists: boolean
+  dimensions: Record<string, ConversationProfileDimension>
+}>

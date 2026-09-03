@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CAPABILITIES, TIERS, type Health, type KnowledgeItem, type KnowledgeWorkflowStatus, type Skill, type SkillVersion, type Tier } from '../domain/vision'
 import type { useAgents } from '../hooks/useAgents'
 import type { useLoops } from '../hooks/useLoops'
+import { useLoopActions } from '../hooks/useLoopActions'
 import type { useModels } from '../hooks/useModels'
 import type { useGovernance } from '../hooks/useGovernance'
 import type { useMcp } from '../hooks/useMcp'
@@ -164,7 +165,7 @@ function LoopsDetail({ loops }: { loops: ReturnType<typeof useLoops> }) {
           <span className="card-detail-overlay__row-meta">· {today.failed} failed</span>
         </div>
       )}
-      {list.length === 0 ? <EmptyRow>No loops configured.</EmptyRow> : <LoopsListBody list={list} />}
+      {list.length === 0 ? <EmptyRow>No loops configured.</EmptyRow> : <LoopsListBody list={list} onChanged={loops.refetch} />}
     </>
   )
 }
@@ -202,19 +203,70 @@ function loopPriority(status: string): number {
   return status === 'paused' ? 0 : 1
 }
 
-function LoopsListBody({ list }: { list: NonNullable<ReturnType<typeof useLoops>['data']>['loops'] }) {
+/** One loop's real action result, shown inline until the next action or the
+ * list refetch replaces it — never a fabricated "done", same honest-outcome
+ * contract `useLoopActions` itself carries. */
+interface LoopOutcomeNote {
+  loopId: string
+  ok: boolean
+  detail: string
+}
+
+function LoopsListBody({
+  list,
+  onChanged,
+}: {
+  list: NonNullable<ReturnType<typeof useLoops>['data']>['loops']
+  onChanged: () => void
+}) {
+  const actions = useLoopActions()
+  const [outcome, setOutcome] = useState<LoopOutcomeNote | null>(null)
   const sorted = [...list].sort((a, b) => loopPriority(a.status) - loopPriority(b.status))
+
+  const settle = (loopId: string) => (result: { ok: boolean; detail: string; loop: unknown }) => {
+    setOutcome({ loopId, ok: result.ok, detail: result.detail || (result.ok ? 'Done.' : 'Failed.') })
+    onChanged()
+  }
+
   return (
     <div className="card-detail-overlay__list">
-      {sorted.map((loop) => (
-        <div key={loop.id} className="card-detail-overlay__row">
-          <span className="card-detail-overlay__row-primary">{loop.name}</span>
-          <span className={`card-detail-overlay__badge card-detail-overlay__badge--${loop.status === 'active' ? 'ok' : 'muted'}`}>{loop.status}</span>
-          <span className="card-detail-overlay__row-meta" title={loop.schedule}>{formatSchedule(loop.trigger, loop.schedule)}</span>
-          <span className="card-detail-overlay__row-meta">Last run: {loop.last_run ? formatWhen(loop.last_run) : 'Never'}</span>
-          <span className="card-detail-overlay__row-meta">Runs: {loop.run_count}</span>
-        </div>
-      ))}
+      {sorted.map((loop) => {
+        const busy = actions.pendingId === loop.id
+        const note = outcome?.loopId === loop.id ? outcome : null
+        const paused = loop.status === 'paused'
+        return (
+          <div key={loop.id} className="card-detail-overlay__group">
+            <div className="card-detail-overlay__row">
+              <span className="card-detail-overlay__row-primary">{loop.name}</span>
+              <span className={`card-detail-overlay__badge card-detail-overlay__badge--${loop.status === 'active' ? 'ok' : 'muted'}`}>{loop.status}</span>
+              <span className="card-detail-overlay__row-meta" title={loop.schedule}>{formatSchedule(loop.trigger, loop.schedule)}</span>
+              <span className="card-detail-overlay__row-meta">Last run: {loop.last_run ? formatWhen(loop.last_run) : 'Never'}</span>
+              <span className="card-detail-overlay__row-meta">Runs: {loop.run_count}</span>
+            </div>
+            <div className="card-detail-overlay__actions">
+              <button
+                type="button"
+                className="card-detail-overlay__promote-button"
+                disabled={busy}
+                onClick={() => (paused ? actions.start(loop.id, settle(loop.id)) : actions.pause(loop.id, settle(loop.id)))}
+              >
+                {busy ? 'Working…' : paused ? 'Start' : 'Pause'}
+              </button>
+              <button
+                type="button"
+                className="card-detail-overlay__promote-button"
+                disabled={busy}
+                onClick={() => actions.runNow(loop.id, settle(loop.id))}
+              >
+                Run now
+              </button>
+              {note && (
+                <span className={`card-detail-overlay__badge card-detail-overlay__badge--${note.ok ? 'ok' : 'danger'}`}>{note.detail}</span>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -502,13 +554,43 @@ function McpDetail({ mcp }: { mcp: ReturnType<typeof useMcp> }) {
         <EmptyRow>No pending approvals.</EmptyRow>
       ) : (
         <div className="card-detail-overlay__list">
-          {pending.map((approval) => (
-            <div key={approval.id} className="card-detail-overlay__row">
-              <span className="card-detail-overlay__row-primary">{approval.server} · {approval.tool}</span>
-              <span className="card-detail-overlay__row-meta">{approval.reason}</span>
-              <span className="card-detail-overlay__row-meta">agent: {approval.agent_id}</span>
-            </div>
-          ))}
+          {pending.map((approval) => {
+            const busy = mcp.pendingApprovalId === approval.id
+            const result = mcp.approvalResult?.approvalId === approval.id ? mcp.approvalResult : null
+            return (
+              <div key={approval.id} className="card-detail-overlay__group">
+                <div className="card-detail-overlay__row">
+                  <span className="card-detail-overlay__row-primary">{approval.server} · {approval.tool}</span>
+                  <span className="card-detail-overlay__row-meta">{approval.reason}</span>
+                  <span className="card-detail-overlay__row-meta">agent: {approval.agent_id}</span>
+                </div>
+                {result ? (
+                  <span className={`card-detail-overlay__badge card-detail-overlay__badge--${result.status === 'denied' ? 'warning' : result.status === 'failed' ? 'danger' : 'ok'}`}>
+                    {result.status === 'failed' ? `Failed — ${result.error}` : result.status}
+                  </span>
+                ) : (
+                  <div className="card-detail-overlay__actions">
+                    <button
+                      type="button"
+                      className="card-detail-overlay__promote-button"
+                      disabled={busy}
+                      onClick={() => mcp.resolveApproval(approval.id, 'approve')}
+                    >
+                      {busy ? 'Working…' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      className="card-detail-overlay__promote-button card-detail-overlay__promote-button--danger"
+                      disabled={busy}
+                      onClick={() => mcp.resolveApproval(approval.id, 'deny')}
+                    >
+                      Deny
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </>
@@ -528,29 +610,55 @@ function SkillRow({
   name,
   autoGenerated,
   lastUpgradedAt,
+  onRolledBack,
 }: {
   skillId: string
   name: string
   autoGenerated?: boolean
   lastUpgradedAt?: string
+  onRolledBack: () => void
 }) {
   const api = useVisionApi()
   const [expanded, setExpanded] = useState(false)
   const [versions, setVersions] = useState<SkillVersion[] | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [rollbackBusy, setRollbackBusy] = useState(false)
+  const [rollbackResult, setRollbackResult] = useState<{ ok: boolean; detail: string } | null>(null)
+
+  const loadVersions = () => {
+    api
+      .getSkillVersions(skillId)
+      .then((result) => setVersions(result.versions))
+      .catch((err: unknown) => {
+        setLoadError(true)
+        if (!(err instanceof VisionApiError)) throw err
+      })
+  }
 
   const toggle = () => {
     const next = !expanded
     setExpanded(next)
-    if (next && versions === null) {
-      api
-        .getSkillVersions(skillId)
-        .then((result) => setVersions(result.versions))
-        .catch((err: unknown) => {
-          setLoadError(true)
-          if (!(err instanceof VisionApiError)) throw err
-        })
-    }
+    if (next && versions === null) loadVersions()
+  }
+
+  const handleRollback = () => {
+    if (!window.confirm(`Roll back "${name}" to its previous version? This replaces the current version.`)) return
+    setRollbackBusy(true)
+    setRollbackResult(null)
+    api
+      .rollbackSkill(skillId)
+      .then(() => {
+        setRollbackResult({ ok: true, detail: 'Rolled back.' })
+        setVersions(null)
+        loadVersions()
+      })
+      .catch((err: unknown) => {
+        setRollbackResult({ ok: false, detail: err instanceof VisionApiError ? err.detail : 'Rollback failed.' })
+      })
+      .finally(() => {
+        setRollbackBusy(false)
+        onRolledBack()
+      })
   }
 
   return (
@@ -574,26 +682,44 @@ function SkillRow({
         <span className="card-detail-overlay__row-meta">{expanded ? 'hide history ▲' : 'version history ▼'}</span>
       </div>
       {expanded && (
-        loadError ? (
-          <EmptyRow>Could not load version history.</EmptyRow>
-        ) : versions === null ? (
-          <EmptyRow>Loading…</EmptyRow>
-        ) : versions.length === 0 ? (
-          <EmptyRow>No versions on record.</EmptyRow>
-        ) : (
-          <div className="card-detail-overlay__list">
-            <div className="card-detail-overlay__row">
-              <span className="card-detail-overlay__row-primary">Revisions</span>
-              <span className="card-detail-overlay__row-meta">{versions.length} on record</span>
-            </div>
-            {versions.map((version) => (
-              <div key={version.version_id} className="card-detail-overlay__row">
-                <span className="card-detail-overlay__row-meta">{formatWhen(version.created_at)}</span>
-                <span className="card-detail-overlay__row-meta">{version.reason || 'no reason given'}</span>
+        <>
+          {loadError ? (
+            <EmptyRow>Could not load version history.</EmptyRow>
+          ) : versions === null ? (
+            <EmptyRow>Loading…</EmptyRow>
+          ) : versions.length === 0 ? (
+            <EmptyRow>No versions on record.</EmptyRow>
+          ) : (
+            <div className="card-detail-overlay__list">
+              <div className="card-detail-overlay__row">
+                <span className="card-detail-overlay__row-primary">Revisions</span>
+                <span className="card-detail-overlay__row-meta">{versions.length} on record</span>
               </div>
-            ))}
+              {versions.map((version) => (
+                <div key={version.version_id} className="card-detail-overlay__row">
+                  <span className="card-detail-overlay__row-meta">{formatWhen(version.created_at)}</span>
+                  <span className="card-detail-overlay__row-meta">{version.reason || 'no reason given'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="card-detail-overlay__actions">
+            {rollbackResult ? (
+              <span className={`card-detail-overlay__badge card-detail-overlay__badge--${rollbackResult.ok ? 'ok' : 'danger'}`}>
+                {rollbackResult.detail}
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="card-detail-overlay__promote-button card-detail-overlay__promote-button--danger"
+                disabled={rollbackBusy}
+                onClick={handleRollback}
+              >
+                {rollbackBusy ? 'Rolling back…' : 'Roll back'}
+              </button>
+            )}
           </div>
-        )
+        </>
       )}
     </div>
   )
@@ -698,6 +824,7 @@ function SkillsDetail({ skills }: { skills: ReturnType<typeof useSkills> }) {
                         name={skill.name}
                         autoGenerated={skill.auto_generated}
                         lastUpgradedAt={recentlyUpgraded.get(skill.id)}
+                        onRolledBack={skills.refetch}
                       />
                     ))}
                   </div>
@@ -996,9 +1123,10 @@ function KnowledgeNotesDetail({ knowledgeNotes }: { knowledgeNotes: ReturnType<t
  * route, never covering the orb underneath). Reads the SAME resource
  * objects `HudLeftPanel` already fetched (passed down from `HomeScreen`),
  * never a second independent fetch. Only ever shows fields the real API
- * actually returns — no per-card action beyond what already exists
- * elsewhere (MCP's pending approvals are read-only here: there is no
- * approve/deny route for them today, unlike Learn suggestions).
+ * actually returns. Implement #13A: MCP approvals, Loop pause/start/run-now,
+ * and Skill rollback are now real write actions here too — each refetches
+ * its own card's resource once the real outcome is known, same convention
+ * Knowledge Notes' own promote button already established.
  */
 export function CardDetailOverlay({ cardId, agents, loops, models, governance, mcp, skills, knowledgeNotes, budget, health, onClose }: CardDetailOverlayProps) {
   // Global empty/error-states audit: gate on the one resource each card is

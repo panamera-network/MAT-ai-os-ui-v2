@@ -11,7 +11,8 @@ export interface McpServer {
  * The commonly-populated subset of a much larger internal approval record —
  * `mcp_approvals.py` carries additional retry/outbox-delivery bookkeeping
  * that isn't relevant to a UI consumer. See docs/VISION_API_CONTRACT.md's
- * MCP section. Read-only: there is no approve/deny route today.
+ * MCP section. `POST /mcp/approvals/{id}/approve|deny` resolve one of
+ * these — see `McpApprovalActionResult` below.
  */
 export interface McpApproval {
   id: string
@@ -48,3 +49,10 @@ export type McpResult = BodyScoped<{
    * simply absent, never a fabricated zeroed entry. */
   activity: Record<string, McpActivity>
 }>
+
+/** `POST /mcp/approvals/{id}/approve|deny`'s own real result — the resolved
+ * approval record verbatim (owner-gated; approve actually dispatches the
+ * call, deny only discards it). */
+export interface McpApprovalActionResult {
+  approval: McpApproval
+}

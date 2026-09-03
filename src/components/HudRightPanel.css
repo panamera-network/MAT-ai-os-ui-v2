@@ -805,6 +805,12 @@
   cursor: pointer;
 }
 
+/* Governed Action Queue rows have no expand/collapse (see QueueTaskRow's
+   own doc comment) -- same layout, never clickable. */
+.hud-pending-learn-row__summary--static {
+  cursor: default;
+}
+
 .hud-pending-learn-row__dot {
   flex: 0 0 auto;
   width: 5px;
@@ -964,6 +970,75 @@
 
 .hud-pending-learn-row__result--failed {
   color: var(--hud-red);
+}
+
+/* Implement #13A: your-memory / Conversation Profile inspection, collapsed
+   inside the existing Memory card's own subsection slot -- same subsection
+   border/spacing already established above, never a new card. */
+.hud-right-panel__memory-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.hud-right-panel__subsection-title {
+  margin: 4px 0 0;
+  color: var(--hud-text-faint);
+  font-size: calc(8px + var(--hud-font-boost));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hud-right-panel__memory-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px;
+  border: 1px solid rgba(184, 163, 255, 0.1);
+  background: rgba(255, 255, 255, 0.015);
+  font-size: calc(8px + var(--hud-font-boost-secondary));
+}
+
+.hud-right-panel__memory-entry-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--hud-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.hud-right-panel__memory-entry-meta {
+  color: var(--hud-text-faint);
+  white-space: nowrap;
+}
+
+/* Same red palette as .hud-pending-learn-row__reject above -- a delete is
+   the same class of destructive action, scoped to this component. */
+.hud-right-panel__memory-entry-delete {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: 1px solid rgba(239, 68, 68, 0.38);
+  border-radius: 3px;
+  background: rgba(91, 21, 28, 0.16);
+  color: var(--hud-red);
+  font-family: var(--hud-font-mono);
+  font-size: calc(7px + var(--hud-font-boost));
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.hud-right-panel__memory-entry-delete:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.14);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.16);
+}
+
+.hud-right-panel__memory-entry-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 @media (max-height: 760px) {

@@ -347,3 +347,28 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* Implement #13A: a destructive action variant (MCP deny, Skill rollback)
+   -- same shape/weight as the base button above, red instead of green,
+   matching HudRightPanel's own .hud-pending-learn-row__reject palette. */
+.card-detail-overlay__promote-button--danger {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(80, 24, 24, 0.18);
+  color: var(--hud-red);
+}
+
+.card-detail-overlay__promote-button--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.14);
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.16);
+}
+
+/* Implement #13A: a row of action buttons (Approve/Deny, Pause/Start/Run
+   now, Roll back) below a detail row -- same gap/wrap as
+   .card-detail-overlay__row, never its own bespoke layout. */
+.card-detail-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 6px;
+}

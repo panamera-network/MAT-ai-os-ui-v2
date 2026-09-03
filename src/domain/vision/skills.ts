@@ -51,3 +51,13 @@ export type SkillsResult = BodyScoped<{
 /** `GET /skills/{skill_id}/versions` — one skill's real upgrade history,
  * owner-scoped exactly like `SkillVersioning.get_versions` itself. */
 export type SkillVersionsResult = BodyScoped<{ skill_id: string; versions: SkillVersion[] }>
+
+/** `POST /skills/{skill_id}/rollback` — `LearningPipelineEngine.
+ * rollback_skill`'s own real outcome verbatim: the restored candidate
+ * record. One step back only (the most recent approved-then-superseded
+ * version), never an arbitrary historical one. Typed loosely, same
+ * untyped-dict convention `SkillVersion.data` already uses — a skill-dict
+ * snapshot, not guaranteed to match today's `Skill` shape field-for-field. */
+export interface SkillRollbackResult {
+  skill: Record<string, unknown>
+}

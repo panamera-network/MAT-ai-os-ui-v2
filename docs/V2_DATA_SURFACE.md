@@ -8,7 +8,7 @@ separately-reviewed decision.
 
 Every group except MAT/System is gated by `body_attached` — if no `V2Body` is
 attached (`MAT_BODY_ENABLED=false`), that group's data is empty/default, not an
-error. "Read" means a `GET`; "Act" means a `POST` that changes real state.
+error. "Read" means a `GET`; "Act" means a `POST`/`DELETE` that changes real state.
 
 ## MAT
 
@@ -23,9 +23,12 @@ The MAT process itself — always available, no body required.
 - **Act**: `POST /think` — send text, get a reply.
 - **Act**: `POST /see` — send an image + prompt, get a reply.
 - **Act**: `POST /listen` — send audio, get transcript + reply (+ optional spoken
-  audio back).
+  audio back). A streaming variant (`WS /listen/stream`) also exists server-side —
+  not adopted by this UI yet.
 - **Act**: `POST /speak` — send text, get spoken audio back.
-- No mutation route for Soul or Identity — both are display-only from this API today.
+- `GET /soul`/`GET /identity` exist in the adapter but are not yet wired into any
+  screen (Implement #13A audit finding — tracked, not fixed by this pass). No
+  mutation route for Soul or Identity exists either way — both are display-only.
 
 ## System
 
@@ -33,7 +36,9 @@ Process lifecycle for the MAT/Body runtime itself.
 
 - **Read**: `GET /control/status` — body attached / running / degraded components.
 - **Act**: `POST /control/start`, `/control/stop`, `/control/restart`,
-  `/control/kill`, `/control/watchdog-check`.
+  `/control/kill`, `/control/watchdog-check`. The UI confirms with the operator
+  before firing Restart or Force Kill — the request itself is unconditional either
+  way, the confirmation is UI-side only.
 
 Not the same thing as **Services** below, even though `vision`'s service status is
 just this same data reflected through a different route — see Services.
@@ -50,8 +55,13 @@ Scheduled/recurring work MAT runs on its own.
 - **Read**: `GET /loops` — id, name, description, trigger type, schedule, task,
   domain, pipeline, done-when condition, status, last/next run, run count, created
   at.
-- No create/pause/resume/delete route exists, even though the underlying engine
-  supports all four internally — this API only exposes the read today.
+- **Read**: `GET /loops/{id}` — the same real record, one at a time.
+- **Act**: `POST /loops/{id}/pause`, `/start`, `/run-now` — operate one of the
+  existing default loops. `run-now`'s real outcome (`executed` /
+  `skipped_not_active` / `skipped_already_running`) is shown verbatim, never
+  collapsed to a bare success/fail.
+- No create/delete route exists, even though the underlying engine supports both
+  internally — only operating an *existing* loop is exposed.
 
 ## Memory
 
@@ -59,7 +69,12 @@ Scheduled/recurring work MAT runs on its own.
   count, estimated size in bytes, plus a `health` object with three independently
   -grounded signals (`module_ready`, `qdrant`, `vector_store_connected` — see
   docs/VISION_API_CONTRACT.md's Memory section).
-- No route to browse individual memories, search, or delete — tier statistics only.
+- **Read**: `GET /memory/user` — the caller's own durable memories, individually.
+- **Act**: `DELETE /memory/user/{id}` — erase one of them.
+- **Read**: `GET /memory/profile` — the caller's own learned Conversation Profile
+  (communication-style dimensions, never a fact about them).
+- **Act**: `DELETE /memory/profile` — reset it. The UI confirms before either
+  delete/reset.
 - Can legitimately return an empty stats object even when a body is attached (memory
   backend unreachable) — a real, non-error state to design for. `health` is always
   present regardless, since it's computed independently of whether tier stats
@@ -78,17 +93,50 @@ Scheduled/recurring work MAT runs on its own.
 
 - **Read**: `GET /skills` — id, name, domain, description, tools required, prompt
   fragment, optional source/learned-at/auto-generated/mcp-servers/ownership fields.
-- No create/update/delete route — read-only.
+- **Read**: `GET /skills/{id}/versions` — one skill's real upgrade history.
+- **Act**: `POST /skills/{id}/rollback` — restore the most recent approved-then-
+  superseded version (one step back only, never an arbitrary historical one). The
+  UI confirms before rolling back.
+- No create/update/delete route beyond that — otherwise read-only.
+
+## MCP
+
+- **Read**: `GET /mcp` — registered servers, pending outbound tool-call approvals,
+  per-server call activity (success/failure counts, last activity).
+- **Act**: `POST /mcp/approvals/{id}/approve` — the one place a pending outbound
+  call actually executes. `POST /mcp/approvals/{id}/deny` — discards it, never
+  dispatches. Both owner-gated.
+- No server register/remove route wired into this UI yet (the route exists
+  server-side; out of scope for this pass — see hard rules in Implement #13A).
+
+## Governed Action Queue
+
+A real `TaskQueue` record that a Law/Contract/Rule verdict deferred to a human —
+distinct from Skills' own Learn-suggestion queue (a proposed new skill, not an
+action pending execution).
+
+- **Read**: `GET /queue/pending-approval` — every task currently `pending_approval`.
+- **Read**: `GET /queue/pending-approval/{id}` — one task's detail, including its
+  real `result`/`error` once resolved.
+- **Act**: `POST /queue/pending-approval/{id}/approve` — claims and executes the
+  task through the real governed spine. `POST /queue/pending-approval/{id}/reject`
+  — discards it. Both owner-gated.
 
 ## Models
 
 MAT's own LLM routing configuration — distinct from Body, never shared with it.
 
-- **Read**: `GET /models` — the full capability × tier matrix
-  (8 capabilities × 4 tiers, each slot a `{provider, model}` pair or empty).
+- **Read**: `GET /models` — the full capability × tier matrix (10 capabilities × 4
+  tiers, each slot a `{provider, model}` pair or empty). The 10 capabilities are
+  `FAST`, `THINKING`, `EXPERT`, `VISION`, `VOICE`, `VOICE_STT`, `VOICE_TTS`, `VIDEO`,
+  `EMBEDDING`, `RERANKER` — `VOICE_STT`/`VOICE_TTS` are the ones Voice actually
+  resolves for STT/TTS dispatch; the combined `VOICE` slot is a separate capability
+  (Implement #13A: the UI's own capability list previously hardcoded only 8 of the
+  10, silently hiding the STT/TTS rows — fixed).
 - **Act**: `POST /models/select` — set or clear one capability's one tier.
-- No discovery/catalog route — this is a fixed matrix the caller edits by hand, not
-  a list to browse.
+- No discovery/catalog route wired into this UI (`GET /models/catalog` exists
+  server-side; out of scope for this pass) — this is a fixed matrix the caller
+  edits by hand, not yet a list to browse from.
 
 ## Services
 
@@ -111,21 +159,25 @@ External process supervision for the MAT.ai ecosystem, config-driven and fixed:
 
 ## Controls
 
-Not a separate data domain — this is the cross-cutting set of every `POST` action
+Not a separate data domain — this is the cross-cutting set of every write action
 above, called out once so it isn't missed when only "read" groups get screen time:
 
 - MAT: `/think`, `/see`, `/listen`, `/speak`
 - System: `/control/start|stop|restart|kill|watchdog-check`
+- Activity: `/loops/{id}/pause|start|run-now`
+- Memory: `DELETE /memory/user/{id}`, `DELETE /memory/profile`
+- Skills: `/skills/{id}/rollback`
+- MCP: `/mcp/approvals/{id}/approve|deny`
+- Governed Action Queue: `/queue/pending-approval/{id}/approve|reject`
 - Models: `/models/select`
 - Services: `/services/{id}/start|stop|restart`
 
 Every one of these is a real, callable action against the live backend — none are
-speculative. Nothing else in the API is currently writable (no way to create a loop,
-resolve an MCP approval, edit identity/soul, or manage agents/skills from outside).
+speculative. Still not writable from this UI: creating/editing a loop, an MCP
+server, or a skill/agent from scratch; editing identity/soul; law/case mutation
+in Governance.
 
 ## Not included above (present in the contract, not part of a clean group)
 
-- **MCP** (`GET /mcp`) — registered servers + pending tool-call approvals. Left out
-  of the ten groups above because the task's own grouping list doesn't name it;
-  noted here so it isn't lost. Read-only — no approve/deny route exists yet, so a
-  V2 screen could observe pending approvals but couldn't act on them.
+- Nothing currently — MCP and the Governed Action Queue (previously the only two
+  gaps here) now have their own sections above.

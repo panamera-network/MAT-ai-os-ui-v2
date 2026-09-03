@@ -1,6 +1,7 @@
 import type {
   AgentsResult,
   BudgetResult,
+  ConversationProfileResult,
   ControlActionResult,
   ControlStatusResult,
   DocumentReadResult,
@@ -16,13 +17,18 @@ import type {
   LearnSuggestionDetail,
   ListenRequest,
   ListenResult,
+  LoopActionResult,
+  LoopRunNowResult,
   LoopsResult,
+  McpApprovalActionResult,
   McpResult,
   MemoryResult,
   ModelSelectRequest,
   ModelsResult,
+  PendingApprovalQueueResult,
   PendingLearnSuggestionsResult,
   PromoteKnowledgeResult,
+  QueuedActionDetail,
   RestartResult,
   SeeRequest,
   SeeResult,
@@ -31,6 +37,7 @@ import type {
   ServiceStartStopResult,
   ServicesResult,
   ServiceStatus,
+  SkillRollbackResult,
   SkillsResult,
   SkillVersionsResult,
   SoulResult,
@@ -40,6 +47,7 @@ import type {
   StopResult,
   ThinkRequest,
   ThinkResult,
+  UserMemoriesResult,
   WatchdogResult,
 } from '../../domain/vision'
 import { DEFAULT_VISION_API_CONFIG, type VisionApiConfig } from './config'
@@ -120,6 +128,23 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
 
   private jsonInit(body: unknown): RequestInit {
     return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  }
+
+  /** For a `204 No Content` route (the two memory deletes) — `requestJson`'s
+   * unconditional `response.json()` would throw on an empty body. */
+  private async requestVoid(path: string, init: RequestInit = {}): Promise<void> {
+    const url = `${this.config.baseUrl}${path}`
+    let response: Response
+    try {
+      response = await fetch(url, { ...init, headers: this.headers(init.headers), signal: this.signal(init.signal ?? undefined) })
+    } catch (cause) {
+      throw new VisionApiError(`Could not reach MAT at ${url} — is the backend running?`, {
+        status: 0,
+        detail: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      })
+    }
+    if (!response.ok) throw await this.errorFor(response)
   }
 
   // ------------------------------------------------------------------
@@ -242,6 +267,22 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
     return this.requestJson<LoopsResult>('/loops', { signal })
   }
 
+  getLoop(loopId: string, signal?: AbortSignal): Promise<LoopActionResult> {
+    return this.requestJson<LoopActionResult>(`/loops/${encodeURIComponent(loopId)}`, { signal })
+  }
+
+  pauseLoop(loopId: string, signal?: AbortSignal): Promise<LoopActionResult> {
+    return this.requestJson<LoopActionResult>(`/loops/${encodeURIComponent(loopId)}/pause`, { method: 'POST', signal })
+  }
+
+  startLoop(loopId: string, signal?: AbortSignal): Promise<LoopActionResult> {
+    return this.requestJson<LoopActionResult>(`/loops/${encodeURIComponent(loopId)}/start`, { method: 'POST', signal })
+  }
+
+  runLoopNow(loopId: string, signal?: AbortSignal): Promise<LoopRunNowResult> {
+    return this.requestJson<LoopRunNowResult>(`/loops/${encodeURIComponent(loopId)}/run-now`, { method: 'POST', signal })
+  }
+
   getEvents(limit?: number, signal?: AbortSignal): Promise<EventsResult> {
     const query = limit !== undefined ? `?limit=${encodeURIComponent(limit)}` : ''
     return this.requestJson<EventsResult>(`/events${query}`, { signal })
@@ -249,6 +290,22 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
 
   getMemory(signal?: AbortSignal): Promise<MemoryResult> {
     return this.requestJson<MemoryResult>('/memory', { signal })
+  }
+
+  getUserMemories(signal?: AbortSignal): Promise<UserMemoriesResult> {
+    return this.requestJson<UserMemoriesResult>('/memory/user', { signal })
+  }
+
+  deleteUserMemory(memoryId: string, signal?: AbortSignal): Promise<void> {
+    return this.requestVoid(`/memory/user/${encodeURIComponent(memoryId)}`, { method: 'DELETE', signal })
+  }
+
+  getConversationProfile(signal?: AbortSignal): Promise<ConversationProfileResult> {
+    return this.requestJson<ConversationProfileResult>('/memory/profile', { signal })
+  }
+
+  deleteConversationProfile(signal?: AbortSignal): Promise<void> {
+    return this.requestVoid('/memory/profile', { method: 'DELETE', signal })
   }
 
   getGovernance(signal?: AbortSignal): Promise<GovernanceResult> {
@@ -259,12 +316,53 @@ export class RestVisionApiAdapter implements VisionApiAdapter {
     return this.requestJson<McpResult>('/mcp', { signal })
   }
 
+  approveMcpApproval(approvalId: string, signal?: AbortSignal): Promise<McpApprovalActionResult> {
+    return this.requestJson<McpApprovalActionResult>(`/mcp/approvals/${encodeURIComponent(approvalId)}/approve`, {
+      method: 'POST',
+      signal,
+    })
+  }
+
+  denyMcpApproval(approvalId: string, reason?: string, signal?: AbortSignal): Promise<McpApprovalActionResult> {
+    const query = reason ? `?reason=${encodeURIComponent(reason)}` : ''
+    return this.requestJson<McpApprovalActionResult>(`/mcp/approvals/${encodeURIComponent(approvalId)}/deny${query}`, {
+      method: 'POST',
+      signal,
+    })
+  }
+
   getSkills(signal?: AbortSignal): Promise<SkillsResult> {
     return this.requestJson<SkillsResult>('/skills', { signal })
   }
 
   getSkillVersions(skillId: string, signal?: AbortSignal): Promise<SkillVersionsResult> {
     return this.requestJson<SkillVersionsResult>(`/skills/${encodeURIComponent(skillId)}/versions`, { signal })
+  }
+
+  rollbackSkill(skillId: string, signal?: AbortSignal): Promise<SkillRollbackResult> {
+    return this.requestJson<SkillRollbackResult>(`/skills/${encodeURIComponent(skillId)}/rollback`, { method: 'POST', signal })
+  }
+
+  getPendingApprovalQueue(signal?: AbortSignal): Promise<PendingApprovalQueueResult> {
+    return this.requestJson<PendingApprovalQueueResult>('/queue/pending-approval', { signal })
+  }
+
+  getPendingApprovalTask(taskId: string, signal?: AbortSignal): Promise<QueuedActionDetail> {
+    return this.requestJson<QueuedActionDetail>(`/queue/pending-approval/${encodeURIComponent(taskId)}`, { signal })
+  }
+
+  approvePendingApprovalTask(taskId: string, signal?: AbortSignal): Promise<QueuedActionDetail> {
+    return this.requestJson<QueuedActionDetail>(`/queue/pending-approval/${encodeURIComponent(taskId)}/approve`, {
+      method: 'POST',
+      signal,
+    })
+  }
+
+  rejectPendingApprovalTask(taskId: string, signal?: AbortSignal): Promise<QueuedActionDetail> {
+    return this.requestJson<QueuedActionDetail>(`/queue/pending-approval/${encodeURIComponent(taskId)}/reject`, {
+      method: 'POST',
+      signal,
+    })
   }
 
   getKnowledge(domain?: string, signal?: AbortSignal): Promise<KnowledgeResult> {
