@@ -751,12 +751,14 @@
   overflow-wrap: anywhere;
 }
 
-.hud-pending-learn-card {
+.hud-pending-learn-card,
+.hud-need-approval-card {
   border-color: rgba(245, 158, 11, 0.28);
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 0 22px rgba(245, 158, 11, 0.06);
 }
 
-.hud-pending-learn-card .hud-right-panel__card-header {
+.hud-pending-learn-card .hud-right-panel__card-header,
+.hud-need-approval-card .hud-right-panel__card-header {
   color: var(--hud-amber);
 }
 
@@ -769,7 +771,8 @@
   font-size: calc(7px + var(--hud-font-boost));
 }
 
-.hud-pending-learn-card__list {
+.hud-pending-learn-card__list,
+.hud-need-approval-card__list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -777,6 +780,66 @@
   overflow-y: auto;
   scrollbar-color: rgba(125, 230, 255, 0.18) transparent;
   scrollbar-width: thin;
+}
+
+/* Need Approval card: compact rows, same visual weight as a Recent Events
+   row (dot + time + one line) -- deliberately lighter than
+   `.hud-pending-learn-row` above, which carries inline reason text + its
+   own approve/reject buttons this card's own rows never show (clicking a
+   row opens NeedApprovalModal instead). */
+.hud-need-approval-card__summary {
+  color: var(--hud-text-faint);
+  font-size: calc(8px + var(--hud-font-boost));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hud-need-approval-row {
+  display: grid;
+  grid-template-columns: 6px 54px 1fr;
+  align-items: start;
+  width: 100%;
+  gap: 8px;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--hud-text-muted);
+  font-family: var(--hud-font-mono);
+  font-size: calc(10px + var(--hud-font-boost-secondary));
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hud-need-approval-row:hover {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.hud-need-approval-row:focus-visible {
+  outline: 1px solid var(--hud-amber);
+  outline-offset: 2px;
+}
+
+.hud-need-approval-row__dot {
+  width: 5px;
+  height: 5px;
+  margin-top: 5px;
+  border: 1px solid var(--hud-amber);
+  border-radius: 50%;
+  color: var(--hud-amber);
+  box-shadow: 0 0 5px currentColor;
+}
+
+.hud-need-approval-row time {
+  color: var(--hud-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-need-approval-row__message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-pending-learn-row {

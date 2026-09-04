@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { hasMemoryStats, isServiceOn } from '../domain/vision'
-import type { LearnSuggestionDetail, LearnSuggestionSummary, QueuedActionSummary, ServiceStatus, VisionEventEntry } from '../domain/vision'
+import type { ServiceStatus, VisionEventEntry } from '../domain/vision'
 import { useServices } from '../hooks/useServices'
 import { useMemoryStats } from '../hooks/useMemoryStats'
 import { PROFILE_DELETE_ID, useUserMemory } from '../hooks/useUserMemory'
@@ -11,6 +11,8 @@ import { useEvents } from '../hooks/useEvents'
 import { usePendingLearn } from '../hooks/usePendingLearn'
 import { usePendingApprovalQueue } from '../hooks/usePendingApprovalQueue'
 import { describeResourceStatus } from '../hooks/useVisionResource'
+import type { NeedApprovalItem } from './NeedApprovalModal'
+import { NeedApprovalModal, needApprovalItemId } from './NeedApprovalModal'
 import type { AddHudEvent, HudEvent, HudEventTone } from './hudEvents'
 import './HudRightPanel.css'
 
@@ -259,7 +261,7 @@ function UnavailableServiceRow({ label, status }: { label: string; status: strin
   )
 }
 
-function LearnApprovalIcon() {
+function NeedApprovalIcon() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
       <path d="M8 1.6 13.2 3.4v3.9c0 3.4-2.2 5.9-5.2 7.1-3-1.2-5.2-3.7-5.2-7.1V3.4L8 1.6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
@@ -274,88 +276,6 @@ function formatSuggestionTime(iso: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }).format(parsed)
 }
 
-interface PendingLearnRowProps {
-  suggestion: LearnSuggestionSummary
-  busy: boolean
-  lastResult: { suggestionId: string; status: string; reason: string } | null
-  fetchDetail: (suggestionId: string) => Promise<LearnSuggestionDetail>
-  onResolve: (suggestionId: string, action: 'approve' | 'reject') => void
-}
-
-/** One pending `new_domain` suggestion — a real `LearnSuggestionManager`
- * record, never fabricated. Collapsed shows just enough to recognize it
- * (domain + reason); expanding fetches the real `GET /learn/pending/{id}`
- * detail (the proposed skill's own name/description/prompt fragment) so an
- * operator can actually judge WHY MAT wants to learn this before acting. */
-function PendingLearnRow({ suggestion, busy, lastResult, fetchDetail, onResolve }: PendingLearnRowProps) {
-  const [expanded, setExpanded] = useState(false)
-  const [detail, setDetail] = useState<LearnSuggestionDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-
-  const toggle = () => {
-    const next = !expanded
-    setExpanded(next)
-    if (next && !detail) {
-      setDetailLoading(true)
-      fetchDetail(suggestion.id)
-        .then(setDetail)
-        .catch(() => {
-          // A failed detail fetch just means the row stays collapsed-ish
-          // (no proposed name/description/prompt) — the summary fields
-          // already shown are still real and still enough to Approve/Reject.
-        })
-        .finally(() => setDetailLoading(false))
-    }
-  }
-
-  const result = lastResult?.suggestionId === suggestion.id ? lastResult : null
-
-  const isDeferred = suggestion.status === 'deferred'
-
-  return (
-    <div className={`hud-pending-learn-row${isDeferred ? ' is-deferred' : ''}`}>
-      <button type="button" className="hud-pending-learn-row__summary" onClick={toggle} aria-expanded={expanded}>
-        <span className="hud-pending-learn-row__dot" aria-hidden="true" />
-        {isDeferred && <span className="hud-pending-learn-row__badge">Deferred</span>}
-        <span className="hud-pending-learn-row__domain">{suggestion.domain ?? suggestion.operation}</span>
-        <span className="hud-pending-learn-row__reason">{suggestion.reason}</span>
-        <time>{formatSuggestionTime(suggestion.created_at)}</time>
-      </button>
-      {expanded && (
-        <div className="hud-pending-learn-row__detail">
-          {detailLoading && <span className="hud-pending-learn-row__loading">Loading detail…</span>}
-          {detail && (
-            <>
-              <div className="hud-pending-learn-row__field">
-                <span>Proposed skill</span>
-                <strong>{detail.proposed.name ?? suggestion.target_skill_id ?? '—'}</strong>
-              </div>
-              {detail.proposed.description && <p className="hud-pending-learn-row__description">{detail.proposed.description}</p>}
-              {detail.proposed.prompt_fragment && (
-                <p className="hud-pending-learn-row__fragment">{detail.proposed.prompt_fragment}</p>
-              )}
-            </>
-          )}
-          {result ? (
-            <span className={`hud-pending-learn-row__result hud-pending-learn-row__result--${result.status}`}>
-              {result.status === 'reviewed' ? 'Reviewed — pending promotion.' : result.status === 'rejected' ? 'Rejected.' : `Failed — ${result.reason}`}
-            </span>
-          ) : (
-            <div className="hud-pending-learn-row__actions">
-              <button type="button" className="hud-pending-learn-row__approve" disabled={busy} onClick={() => onResolve(suggestion.id, 'approve')}>
-                Approve
-              </button>
-              <button type="button" className="hud-pending-learn-row__reject" disabled={busy} onClick={() => onResolve(suggestion.id, 'reject')}>
-                Reject
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /** `resolve`'s real result, one HUD event per resolution — 'reviewed' (the
  * approved decision's Knowledge Note cleared the mandatory gate — NOT yet a
  * written skill) reads as success, 'rejected' as a deliberate (not
@@ -368,147 +288,146 @@ function resultEventTone(status: string): HudEventTone {
   return 'danger'
 }
 
-/** Real `GET /learn/pending` queue — the operator-review half of the
- * new-domain Learn flow (`/learn` itself auto-confirms create/improve;
- * only a brand-new domain ever lands here). Never mixed with MCP's own
- * pending-approvals count in the left panel — a different approval
- * concept entirely, no shared abstraction exists to fold them into.
- *
- * Batch A: every real approve/reject result now also lands in Recent
- * Events (`onEvent`), not just the row's own inline result text — fires
- * exactly once per resolution, keyed on `lastResult`'s own object identity
- * (a fresh object every real resolve, never on an unrelated re-render). */
-function PendingLearnCard({ onEvent }: { onEvent: AddHudEvent }) {
-  const { suggestions, loading, pendingId, lastResult, resolve, fetchDetail } = usePendingLearn()
+function needApprovalItemTime(item: NeedApprovalItem): number {
+  const parsed = new Date(item.data.created_at).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
 
-  useEffect(() => {
-    if (!lastResult) return
-    const message = lastResult.status === 'reviewed'
-      ? 'Learn suggestion approved'
-      : lastResult.status === 'rejected'
-        ? 'Learn suggestion rejected'
-        : `Learn suggestion failed — ${lastResult.reason}`
-    onEvent(message, resultEventTone(lastResult.status))
-  }, [lastResult, onEvent])
+function needApprovalItemLabel(item: NeedApprovalItem): string {
+  return item.kind === 'action' ? item.data.task : item.data.domain ?? item.data.operation
+}
 
-  if (!loading && suggestions.length === 0) return null
-
+/** One compact preview row — same visual weight as a Recent Events row
+ * (dot + time + one line of text, no reason/detail, nothing clickable
+ * inline) since the task's own density/line-limit instruction points at
+ * that exact card. Clicking anywhere on the row opens the real detail +
+ * Approve/Reject in `NeedApprovalModal` — this row itself never resolves
+ * anything. */
+function NeedApprovalRow({ item, onSelect }: { item: NeedApprovalItem; onSelect: (item: NeedApprovalItem) => void }) {
   return (
-    <section className="hud-right-panel__card hud-pending-learn-card">
-      <header className="hud-right-panel__card-header">
-        <LearnApprovalIcon />
-        <span>Learn Approvals</span>
-        {suggestions.length > 0 && <span className="hud-pending-learn-card__count">{suggestions.length}</span>}
-      </header>
-      <div className="hud-pending-learn-card__list">
-        {loading && suggestions.length === 0 ? (
-          <span className="hud-right-panel__events-empty">Loading…</span>
-        ) : (
-          suggestions.map((suggestion) => (
-            <PendingLearnRow
-              key={suggestion.id}
-              suggestion={suggestion}
-              busy={pendingId === suggestion.id}
-              lastResult={lastResult}
-              fetchDetail={fetchDetail}
-              onResolve={resolve}
-            />
-          ))
-        )}
-      </div>
-    </section>
+    <button type="button" className="hud-need-approval-row" onClick={() => onSelect(item)}>
+      <span className="hud-need-approval-row__dot" aria-hidden="true" />
+      <time>{formatSuggestionTime(item.data.created_at)}</time>
+      <span className="hud-need-approval-row__message">{needApprovalItemLabel(item)}</span>
+    </button>
   )
 }
 
-interface QueueTaskRowProps {
-  task: QueuedActionSummary
-  busy: boolean
-  lastResult: { taskId: string; status: string; result: string | null; error: string | null } | null
-  onResolve: (taskId: string, action: 'approve' | 'reject') => void
-}
-
-/** One real `TaskQueue` record a Law/Contract/Rule verdict deferred to a
- * human — the Governed Action Bridge's own approval gate, distinct from
- * Learn's new-domain suggestions above. Always shows the raw task text
- * (there is nothing more sanitized to show in its place) plus WHY it was
- * deferred (`stage`/`action`) and WHO triggered it — never a further
- * expand-to-fetch-detail: `GET /queue/pending-approval/{id}` itself 404s
- * once a task stops being `pending_approval` (the same status gate
- * `approve`/`reject` enforce), so fetching it after resolving would just
- * fail — the real outcome only ever comes from the resolve action's own
- * response, shown via `lastResult` below. */
-function QueueTaskRow({ task, busy, lastResult, onResolve }: QueueTaskRowProps) {
-  const result = lastResult?.taskId === task.id ? lastResult : null
-
-  return (
-    <div className="hud-pending-learn-row">
-      <div className="hud-pending-learn-row__summary hud-pending-learn-row__summary--static">
-        <span className="hud-pending-learn-row__dot" aria-hidden="true" />
-        <span className="hud-pending-learn-row__domain">{task.task}</span>
-        <span className="hud-pending-learn-row__reason">{task.detail ?? task.action ?? task.stage ?? 'pending approval'}</span>
-        <time>{formatSuggestionTime(task.created_at)}</time>
-      </div>
-      <div className="hud-pending-learn-row__detail">
-        <div className="hud-pending-learn-row__field">
-          <span>Requested by</span>
-          <strong>{task.user_id}</strong>
-        </div>
-        {result ? (
-          <span className={`hud-pending-learn-row__result hud-pending-learn-row__result--${result.status === 'rejected' ? 'rejected' : result.status === 'failed' ? 'failed' : 'reviewed'}`}>
-            {result.status === 'rejected' ? 'Rejected.' : result.error ? `Failed — ${result.error}` : `${result.status}${result.result ? ` — ${result.result}` : ''}`}
-          </span>
-        ) : (
-          <div className="hud-pending-learn-row__actions">
-            <button type="button" className="hud-pending-learn-row__approve" disabled={busy} onClick={() => onResolve(task.id, 'approve')}>
-              Approve
-            </button>
-            <button type="button" className="hud-pending-learn-row__reject" disabled={busy} onClick={() => onResolve(task.id, 'reject')}>
-              Reject
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/** Real `GET /queue/pending-approval` queue — the Governed Action Bridge's
- * own human-approval gate for an ACTION MAT wants to execute (never a chat
- * reply). Same visual language and refetch-after-resolve convention as
- * `PendingLearnCard` above, kept as a separate card since it's a genuinely
- * different approval concept (an action pending execution, not a proposed
- * new skill) — no shared abstraction invented to fold them into one. */
-function GovernedActionQueueCard({ onEvent }: { onEvent: AddHudEvent }) {
-  const { items, loading, pendingId, lastResult, resolve } = usePendingApprovalQueue()
+/** The persistent, always-visible Need Approval card — replaces the two
+ * previously-separate, transient "Learn Approvals"/"Action Approvals" cards
+ * (both used to vanish entirely once empty, and briefly flashed a resolved
+ * row's result before a refetch removed it). Reuses `usePendingLearn`'s and
+ * `usePendingApprovalQueue`'s own existing fetch/resolve logic verbatim —
+ * no second data flow, no new backend contract. A real `QueuedActionSummary`
+ * or `LearnSuggestionSummary` is never re-labeled into a shared fake shape;
+ * `NeedApprovalItem`'s own two-case union keeps each kind's real fields
+ * intact all the way into the modal. */
+export function NeedApprovalCard({ onEvent }: { onEvent: AddHudEvent }) {
+  const queue = usePendingApprovalQueue()
+  const learn = usePendingLearn()
+  const [expanded, setExpanded] = useState(false)
+  const [selected, setSelected] = useState<NeedApprovalItem | null>(null)
 
   useEffect(() => {
-    if (!lastResult) return
-    const message = lastResult.status === 'rejected'
+    if (!queue.lastResult) return
+    const message = queue.lastResult.status === 'rejected'
       ? 'Pending action rejected'
-      : lastResult.error
-        ? `Pending action failed — ${lastResult.error}`
+      : queue.lastResult.error
+        ? `Pending action failed — ${queue.lastResult.error}`
         : 'Pending action approved'
-    onEvent(message, lastResult.status === 'rejected' ? 'warning' : lastResult.error ? 'danger' : 'success')
-  }, [lastResult, onEvent])
+    onEvent(message, queue.lastResult.status === 'rejected' ? 'warning' : queue.lastResult.error ? 'danger' : 'success')
+  }, [queue.lastResult, onEvent])
 
-  if (!loading && items.length === 0) return null
+  useEffect(() => {
+    if (!learn.lastResult) return
+    const message = learn.lastResult.status === 'reviewed'
+      ? 'Learn suggestion approved'
+      : learn.lastResult.status === 'rejected'
+        ? 'Learn suggestion rejected'
+        : `Learn suggestion failed — ${learn.lastResult.reason}`
+    onEvent(message, resultEventTone(learn.lastResult.status))
+  }, [learn.lastResult, onEvent])
+
+  const items = useMemo<NeedApprovalItem[]>(() => {
+    const merged: NeedApprovalItem[] = [
+      ...queue.items.map((data) => ({ kind: 'action' as const, data })),
+      ...learn.suggestions.map((data) => ({ kind: 'learn' as const, data })),
+    ]
+    return merged.sort((a, b) => needApprovalItemTime(b) - needApprovalItemTime(a))
+  }, [queue.items, learn.suggestions])
+
+  // Auto-close the modal once its item is genuinely gone (resolved, then
+  // the owning hook's own refetch removed it from the real list) — never a
+  // guessed timer here; this only reacts to the real, already-refetched data.
+  useEffect(() => {
+    if (selected && !items.some((item) => needApprovalItemId(item) === needApprovalItemId(selected))) {
+      setSelected(null)
+    }
+  }, [items, selected])
+
+  // Existing offline/error treatment (`describeResourceStatus`), only shown
+  // when there is truly nothing else to display — a real error on one
+  // source never hides real, already-loaded items from the other.
+  const queueStatus = describeResourceStatus({ data: queue.items.length > 0 ? queue.items : null, loading: queue.loading, error: queue.error })
+  const learnStatus = describeResourceStatus({ data: learn.suggestions.length > 0 ? learn.suggestions : null, loading: learn.loading, error: learn.error })
+  const status = items.length === 0 ? (queueStatus ?? learnStatus) : null
+
+  const visibleItems = expanded ? items : items.slice(0, 5)
+
+  const selectedBusy = selected
+    ? (selected.kind === 'action' ? queue.pendingId === selected.data.id : learn.pendingId === selected.data.id)
+    : false
+  const selectedError = selected
+    ? (selected.kind === 'action'
+      ? (queue.lastResult?.taskId === selected.data.id ? queue.lastResult.error : null)
+      : (learn.lastResult?.suggestionId === selected.data.id && learn.lastResult.status !== 'reviewed' ? learn.lastResult.reason : null))
+    : null
 
   return (
-    <section className="hud-right-panel__card hud-pending-learn-card">
+    <section className="hud-right-panel__card hud-need-approval-card">
       <header className="hud-right-panel__card-header">
-        <ShieldIcon />
-        <span>Action Approvals</span>
+        <NeedApprovalIcon />
+        <span>Need Approval</span>
         {items.length > 0 && <span className="hud-pending-learn-card__count">{items.length}</span>}
       </header>
-      <div className="hud-pending-learn-card__list">
-        {loading && items.length === 0 ? (
-          <span className="hud-right-panel__events-empty">Loading…</span>
+      <div className="hud-need-approval-card__list">
+        {status ? (
+          <span className="hud-right-panel__events-empty">{status}</span>
+        ) : items.length === 0 ? (
+          <span className="hud-right-panel__events-empty">No approvals needed</span>
         ) : (
-          items.map((task) => (
-            <QueueTaskRow key={task.id} task={task} busy={pendingId === task.id} lastResult={lastResult} onResolve={resolve} />
-          ))
+          <>
+            <span className="hud-need-approval-card__summary">{items.length} need approval</span>
+            {visibleItems.map((item) => (
+              <NeedApprovalRow key={needApprovalItemId(item)} item={item} onSelect={setSelected} />
+            ))}
+          </>
         )}
       </div>
+      {items.length > 5 && (
+        <button
+          type="button"
+          className="hud-right-panel__view-all"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+        >
+          <span>{expanded ? 'Hide' : 'View All'}</span>
+          <span style={{ '--chevron-rotate': expanded ? '90deg' : '0deg' } as CSSProperties} className="hud-right-panel__chevron">
+            <ChevronIcon />
+          </span>
+        </button>
+      )}
+      {selected && (
+        <NeedApprovalModal
+          item={selected}
+          busy={selectedBusy}
+          lastActionError={selectedError}
+          fetchLearnDetail={learn.fetchDetail}
+          onApprove={() => (selected.kind === 'action' ? queue.resolve(selected.data.id, 'approve') : learn.resolve(selected.data.id, 'approve'))}
+          onReject={() => (selected.kind === 'action' ? queue.resolve(selected.data.id, 'reject') : learn.resolve(selected.data.id, 'reject'))}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </section>
   )
 }
@@ -842,8 +761,7 @@ export function HudRightPanel({ events, onEvent }: HudRightPanelProps) {
         </div>
       </section>
 
-      <PendingLearnCard onEvent={onEvent} />
-      <GovernedActionQueueCard onEvent={onEvent} />
+      <NeedApprovalCard onEvent={onEvent} />
 
       <section className={`hud-right-panel__card hud-right-panel__memory-card${memoryAttentionDanger ? ' is-attention-danger' : ''}`}>
         <header className="hud-right-panel__card-header hud-memory__header">

@@ -10,6 +10,12 @@ const fetchPending = (api: VisionApiAdapter, signal: AbortSignal) => api.getPend
 interface UsePendingLearnResult {
   suggestions: PendingLearnSuggestionsResult['suggestions']
   loading: boolean
+  /** The real fetch error, if the last load failed — previously computed by
+   * `useVisionResource` but never returned, so a genuine backend error was
+   * indistinguishable from "zero pending suggestions" to any caller. Needed
+   * for the Need Approval card to show the existing offline/error treatment
+   * (`describeResourceStatus`) instead of silently reading as empty. */
+  error: VisionApiError | null
   /** Suggestion id currently mid-approve/reject, if any — disable that one
    * row's actions, not the whole list. */
   pendingId: string | null
@@ -66,6 +72,7 @@ export function usePendingLearn(): UsePendingLearnResult {
   return {
     suggestions: resource.data?.suggestions ?? [],
     loading: resource.loading,
+    error: resource.error,
     pendingId,
     lastResult,
     resolve,

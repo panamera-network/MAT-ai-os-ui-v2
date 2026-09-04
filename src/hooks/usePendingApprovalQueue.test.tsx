@@ -75,6 +75,17 @@ describe('usePendingApprovalQueue', () => {
     await waitFor(() => expect(result.current.lastResult?.status).toBe('failed'))
   })
 
+  it('surfaces the real fetch error instead of reading as an empty list', async () => {
+    const api = createFakeVisionApi()
+    api.getPendingApprovalQueue.mockRejectedValue(new VisionApiError('boom', { status: 500, detail: 'Queue backend unreachable.' }))
+    const { result } = renderHook(() => usePendingApprovalQueue(), { wrapper: wrapper(api) })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.items).toEqual([])
+    expect(result.current.error).toBeInstanceOf(VisionApiError)
+    expect(result.current.error?.detail).toBe('Queue backend unreachable.')
+  })
+
   it('refetches the list after a resolve settles (action refresh behavior)', async () => {
     vi.useFakeTimers()
     const api = createFakeVisionApi()

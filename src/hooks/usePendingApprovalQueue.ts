@@ -10,6 +10,12 @@ const fetchQueue = (api: VisionApiAdapter, signal: AbortSignal) => api.getPendin
 interface UsePendingApprovalQueueResult {
   items: PendingApprovalQueueResult['items']
   loading: boolean
+  /** The real fetch error, if the last load failed — previously computed by
+   * `useVisionResource` but never returned, so a genuine backend error was
+   * indistinguishable from "zero pending items" to any caller. Needed for
+   * the Need Approval card to show the existing offline/error treatment
+   * (`describeResourceStatus`) instead of silently reading as empty. */
+  error: VisionApiError | null
   /** Task id currently mid-approve/reject, if any — disable that one row's
    * actions, not the whole list. */
   pendingId: string | null
@@ -63,6 +69,7 @@ export function usePendingApprovalQueue(): UsePendingApprovalQueueResult {
   return {
     items: resource.data?.items ?? [],
     loading: resource.loading,
+    error: resource.error,
     pendingId,
     lastResult,
     resolve,
