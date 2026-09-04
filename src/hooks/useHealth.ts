@@ -5,7 +5,7 @@ import type { Health } from '../domain/vision'
 
 export type ConnectionState = 'checking' | 'online' | 'offline'
 
-interface UseHealthResult {
+export interface UseHealthResult {
   health: Health | null
   connection: ConnectionState
   error: VisionApiError | null

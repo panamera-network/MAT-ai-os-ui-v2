@@ -3,6 +3,7 @@ import { AppShell } from '../components/AppShell'
 import { TopBar } from '../components/TopBar'
 import { ActiveCanvas, type ActiveCanvasView } from '../components/ActiveCanvas'
 import { CanvasSwitcher } from '../components/CanvasSwitcher'
+import { IAmMatButton } from '../components/IAmMatButton'
 import { HudStatus } from '../components/HudStatus'
 import { HudLeftPanel } from '../components/HudLeftPanel'
 import { HudRightPanel } from '../components/HudRightPanel'
@@ -62,7 +63,8 @@ function toHudEventTone(tone: 'ok' | 'warning' | 'danger' | 'muted'): HudEventTo
  */
 export function HomeScreen() {
   const [view, setView] = useState<ActiveCanvasView>('presence')
-  const { connection, health } = useHealth()
+  const healthResource = useHealth()
+  const { connection, health } = healthResource
   const agents = useAgents()
   const loops = useLoops()
   const models = useModels()
@@ -172,6 +174,7 @@ export function HomeScreen() {
       }
       left={
         <>
+          <IAmMatButton active={view === 'iammat'} onClick={() => setView('iammat')} />
           <CanvasSwitcher view={view} onChange={setView} />
           <HudLeftPanel
             agents={agents}
@@ -233,7 +236,7 @@ export function HomeScreen() {
         />
       }
     >
-      <ActiveCanvas view={view} />
+      <ActiveCanvas view={view} health={healthResource} />
     </AppShell>
   )
 }

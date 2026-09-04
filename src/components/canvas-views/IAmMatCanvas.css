@@ -1,0 +1,247 @@
+.iammat-canvas {
+  position: fixed;
+  top: 12.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, 84vw);
+  height: 75%;
+  display: flex;
+  justify-content: center;
+}
+
+.iammat-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 620px 480px at 50% 30%, var(--hud-accent-glow), transparent 70%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.iammat-canvas__scroll {
+  position: fixed;
+  /* Same width formula CardDetailOverlay's own modal already uses --
+     reads as the same-sized object as the app's other center-canvas panel. */
+  width: min(720px, 84vw);
+  height: 88%;
+  overflow-y: auto;
+  /* Top trimmed 10%, bottom trimmed 20% off the original 28px/40px -- less
+     leading/trailing empty space so the panel stack reads closer to
+     vertically centered in the canvas. Deliberately NOT `justify-content:
+     center` here -- on an overflowing flex scroll container that clips the
+     start-side overflow in most browsers, making the header/Identity
+     section unreachable by scroll once content is taller than the canvas
+     (confirmed live). Padding alone gets the "mostly centered" effect
+     without breaking scroll reachability. */
+  padding: 25px 4px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-color: rgba(125, 230, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.iammat-canvas__header {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.iammat-canvas__header h1 {
+  margin: 0;
+  color: var(--hud-text);
+  font-family: var(--hud-font-mono);
+  font-size: calc(22px + var(--hud-font-boost));
+  font-weight: 650;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px rgba(184, 163, 255, 0.28);
+}
+
+.iammat-canvas__subtitle {
+  margin: 6px 0 0;
+  color: var(--hud-text-faint);
+  font-family: var(--hud-font-mono);
+  font-size: calc(11px + var(--hud-font-boost));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.iammat-canvas__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px 16px 16px;
+  border: 1px solid rgba(184, 163, 255, 0.2);
+  border-top-color: rgba(208, 195, 255, 0.3);
+  border-right-color: rgba(184, 163, 255, 0.24);
+  background:
+    linear-gradient(118deg, rgba(231, 250, 255, 0.06), transparent 30%),
+    linear-gradient(245deg, rgba(184, 163, 255, 0.035), transparent 42%),
+    rgba(5, 11, 19, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 34px rgba(0, 0, 0, 0.14);
+  -webkit-backdrop-filter: blur(8px) saturate(138%) brightness(1.03);
+  backdrop-filter: blur(8px) saturate(138%) brightness(1.03);
+  clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
+}
+
+.iammat-canvas__panel h2 {
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(184, 163, 255, 0.14);
+  color: var(--hud-text);
+  font-family: var(--hud-font-mono);
+  font-size: calc(11px + var(--hud-font-boost));
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.iammat-canvas__empty {
+  color: var(--hud-text-faint);
+  font-size: calc(11px + var(--hud-font-boost-secondary));
+  line-height: 1.4;
+}
+
+.iammat-canvas__field-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.iammat-canvas__field {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--hud-text-faint);
+  font-size: calc(10px + var(--hud-font-boost));
+}
+
+.iammat-canvas__field strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+  color: var(--hud-text-muted);
+  font-weight: 600;
+}
+
+.iammat-canvas__toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--hud-cyan);
+  font-family: var(--hud-font-mono);
+  font-size: calc(10px + var(--hud-font-boost));
+  font-weight: 550;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.iammat-canvas__toggle:hover {
+  color: var(--hud-text);
+}
+
+.iammat-canvas__text-block {
+  margin: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(184, 163, 255, 0.14);
+  border-radius: 3px;
+  background: rgba(5, 11, 19, 0.3);
+  color: var(--hud-text-muted);
+  font-size: calc(10px + var(--hud-font-boost-secondary));
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.iammat-canvas__faculty-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.iammat-canvas__faculty-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(184, 163, 255, 0.11);
+  background: rgba(2, 8, 15, 0.17);
+  font-size: calc(10px + var(--hud-font-boost));
+}
+
+.iammat-canvas__faculty-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.iammat-canvas__faculty-dot.is-ready {
+  color: var(--hud-green);
+}
+
+.iammat-canvas__faculty-dot.is-unavailable {
+  color: var(--hud-red);
+}
+
+.iammat-canvas__faculty-name {
+  flex: 1 1 auto;
+  min-width: 90px;
+  color: var(--hud-text);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.iammat-canvas__faculty-state {
+  flex: 0 0 auto;
+  font-size: calc(9px + var(--hud-font-boost));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.iammat-canvas__faculty-state.is-ready {
+  color: var(--hud-green);
+}
+
+.iammat-canvas__faculty-state.is-unavailable {
+  color: var(--hud-red);
+}
+
+.iammat-canvas__faculty-configured {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.iammat-canvas__configured-chip {
+  padding: 1px 6px;
+  border: 1px solid rgba(184, 163, 255, 0.2);
+  border-radius: 7px;
+  color: var(--hud-text-faint);
+  font-size: calc(8px + var(--hud-font-boost));
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.iammat-canvas__configured-chip.is-off {
+  border-color: rgba(245, 158, 11, 0.34);
+  color: var(--hud-amber);
+}
+
+.iammat-canvas__caption {
+  margin: 2px 0 0;
+  color: var(--hud-text-faint);
+  font-size: calc(9px + var(--hud-font-boost-secondary));
+  line-height: 1.4;
+}
