@@ -45,14 +45,25 @@ function isPubliclyVisible(ownerUserId?: string | null, isGlobal?: boolean): boo
  * domains don't have a dedicated Agent yet, see `agentForDomain`) — never a
  * fixed/fabricated list. Each domain's real Agent (if one exists) supplies
  * its display name; otherwise the raw domain slug is humanized. Skills and
- * knowledge are grouped by real `domain` fields only. `details` (the
- * package's third nesting tier, meant for a traced relation) is left empty
- * for every leaf: no genuine Skill<->Knowledge relationship exists in the
- * backend today (KnowledgeEngine and the skill/agent registries share no
- * field, and the one adjacent mechanism, KnowledgeGraph, is unpopulated in
- * production and out of scope here) — populating it with e.g. "same
- * domain" would imply a specific traced relation that isn't real. */
-function buildDomains(agents: Agent[], skills: Skill[], knowledge: KnowledgeItem[]): BrainViewDomain[] {
+ * knowledge are grouped by real `domain` fields only.
+ *
+ * `details` (the package's third nesting tier, "nested detail nodes
+ * revealed under this leaf while its domain is focused") is populated from
+ * the ONE genuine Skill<->Knowledge relationship the backend actually
+ * exposes: `KnowledgeItem.promoted_skill_id` — set only once a human calls
+ * `POST /knowledge/{id}/promote`, `null` for every note that hasn't been.
+ * A knowledge leaf's `details` is the one real skill it was promoted into
+ * (at most one, since `promoted_skill_id` is a single id); a skill leaf's
+ * `details` is every real knowledge note whose `promoted_skill_id` points
+ * back at it (an "improve" promotion can update the same skill from more
+ * than one note, so this is genuinely 0-to-many, never assumed to be 0-or-1).
+ * Both sides join against this SAME domain's own already visibility-
+ * filtered `domainSkills`/`domainKnowledge` below, never the raw unfiltered
+ * lists, so a detail node here can never reference a private skill/note
+ * this view wouldn't otherwise show on its own. Everything else (e.g. "same
+ * domain" alone) is deliberately NOT treated as a relationship — that would
+ * be a traced link this codebase can't actually back with a real field. */
+export function buildDomains(agents: Agent[], skills: Skill[], knowledge: KnowledgeItem[]): BrainViewDomain[] {
   const domainSlugs = [...new Set(skills.map((skill) => skill.domain))].sort((a, b) => a.localeCompare(b))
   const agentByDomain = new Map(agents.filter((agent) => isPubliclyVisible(agent.user_id, agent.is_global)).map((agent) => [agent.domain, agent]))
 
@@ -62,13 +73,33 @@ function buildDomains(agents: Agent[], skills: Skill[], knowledge: KnowledgeItem
     const domainSkills = skills.filter((skill) => skill.domain === domainSlug && isPubliclyVisible(skill.owner_user_id, skill.is_global))
     const domainKnowledge = knowledge.filter((item) => item.domain === domainSlug && item.active_version !== null)
 
+    const skillById = new Map(domainSkills.map((skill) => [skill.id, skill]))
+    const knowledgeByPromotedSkillId = new Map<string, KnowledgeItem[]>()
+    for (const item of domainKnowledge) {
+      if (!item.promoted_skill_id) continue
+      const promotedInto = knowledgeByPromotedSkillId.get(item.promoted_skill_id)
+      if (promotedInto) promotedInto.push(item)
+      else knowledgeByPromotedSkillId.set(item.promoted_skill_id, [item])
+    }
+
     return {
       id: domainSlug,
       name: agent ? agent.name : humanizeDomainSlug(domainSlug),
       icon: style.icon,
       accent: style.accent,
-      skills: domainSkills.map((skill) => ({ id: skill.id, label: skill.name })),
-      knowledge: domainKnowledge.map((item) => ({ id: item.id, label: item.topic })),
+      skills: domainSkills.map((skill) => ({
+        id: skill.id,
+        label: skill.name,
+        details: (knowledgeByPromotedSkillId.get(skill.id) ?? []).map((item) => ({ id: item.id, label: item.topic })),
+      })),
+      knowledge: domainKnowledge.map((item) => {
+        const promotedSkill = item.promoted_skill_id ? skillById.get(item.promoted_skill_id) : undefined
+        return {
+          id: item.id,
+          label: item.topic,
+          details: promotedSkill ? [{ id: promotedSkill.id, label: promotedSkill.name }] : [],
+        }
+      }),
     }
   })
 }
@@ -78,9 +109,16 @@ function buildDomains(agents: Agent[], skills: Skill[], knowledge: KnowledgeItem
  * `useSkills`/`useKnowledge`-equivalent fetches, each a single glance-and-
  * load (no polling: "Default Brain View kekal ringan", and this view isn't
  * always mounted). `BrainView` itself is fully prop-driven and untouched
- * from the standalone package — this file only ever reshapes real VISION
- * API data into its `BrainViewDomain[]` contract, never fabricates a node
- * or a connection that isn't backed by real data (see `buildDomains`).
+ * from the standalone package (`@mat-ai-os/brain-view`, its own separate
+ * repo, `D:\MAT-AI-BrainView` — not modified by this feature) — this file
+ * only ever reshapes real VISION API data into its `BrainViewDomain[]`
+ * contract, including the real Knowledge<->Skill `details` cross-link (see
+ * `buildDomains`), never a fabricated node or connection.
+ *
+ * Skill/Knowledge tab placement (`tabsPlacement="top-center"` below) is now
+ * the package's own owned, prop-driven behavior — this repo no longer
+ * ships a CSS override reaching into the package's internal
+ * `.brain-view-tabs` class (see `MAT-AI-BrainView`'s own `BrainViewProps`).
  */
 export function BrainViewCanvas() {
   const [tab, setTab] = useState<BrainViewTab>('skills')
@@ -102,6 +140,7 @@ export function BrainViewCanvas() {
       selectedId={selectedId}
       onSelect={(selection) => setSelectedId(selection.id)}
       onExplore={() => setSelectedId(null)}
+      tabsPlacement="top-center"
     />
   )
 }
